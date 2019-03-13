@@ -2,4 +2,5 @@ import tensorflow as tf
 
 
 class LocallyDenseLayer(tf.layers.Dense):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
