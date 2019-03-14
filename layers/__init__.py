@@ -1,1 +1,1 @@
-__all__ = ["LocallyDenseLayer", "TiedDenseLayer", "LocallyDropoutLayer", "TiedDropoutLayer"]
+__all__ = ["tied"]
