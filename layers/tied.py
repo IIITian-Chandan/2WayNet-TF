@@ -1,8 +1,9 @@
 import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
-from tensorflow.python.keras.engine.input_spec import InputSpec
+from tensorflow.keras.layers import InputSpec
+from tensorflow.python.layers import base
 
-class TiedDenseLayer(tf.layers.Dense):
+class TiedDenseLayer(tf.layers.Dense, base.Layer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tied_kernel = kwargs.get('tied_kernel')
@@ -12,7 +13,9 @@ class TiedDenseLayer(tf.layers.Dense):
         super().call(*args, **kwargs)
 
     def build(self, input_shape):
+        return super.build(input_shape)
         # this build() was copied from the parent implementation
+        # https://github.com/tensorflow/tensorflow/blob/3be3aea56e19e2bcb440ccd736ee86b4e3d6c197/tensorflow/python/keras/layers/core.py
         input_shape = tensor_shape.TensorShape(input_shape)
         if tensor_shape.dimension_value(input_shape[-1]) is None:
             raise ValueError('The last dimension of the inputs to `Dense` '
@@ -44,3 +47,15 @@ class TiedDenseLayer(tf.layers.Dense):
                 dtype=self.dtype,
                 trainable=True)
         self.built = True
+
+
+class TiedDropoutLayer(tf.layers.Dropout):
+    pass
+
+
+class LocallyDenseLayer(tf.layers.Dense):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+class LocallyDropoutLayer(tf.layers.Dropout):
+    pass
