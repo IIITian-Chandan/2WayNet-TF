@@ -84,26 +84,16 @@ def _test_TiedDenseLayer_1(do_tied):
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
 
-
-    # model = tf.keras.models.Sequential([TDxy])
     def combined_loss_func(y0, y1):
         return (tf.losses.mean_squared_error(y0, y1) * 0.5 +
                 0.5 * tf.losses.mean_squared_error(inputs, Xreconstruct))
-
-
     def XYloss(y_true, y_pred):
         return tf.losses.mean_squared_error(y_true, y_pred)
-
-
     def YXloss(y_true, y_pred):
         return tf.losses.mean_squared_error(inputs, Xreconstruct)
 
-
-    loss_func = combined_loss_func
-
     optimizer = tf.train.MomentumOptimizer(use_nesterov=True, learning_rate=0.001, momentum=0.8)
-    ##train_step = optimizer.minimize(loss)
-    model.compile(optimizer, loss=loss_func, metrics=[XYloss, YXloss])  ##'mean_squared_error')
+    model.compile(optimizer, loss=combined_loss_func, metrics=[XYloss, YXloss])
     log_dir = "/tmp/logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir)
 
