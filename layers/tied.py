@@ -1,5 +1,6 @@
 import numbers
 import tensorflow as tf
+import datetime
 from tensorflow.keras.layers import InputSpec
 from tensorflow.python.framework import tensor_shape
 ##from tensorflow.python.layers import base
@@ -57,6 +58,62 @@ class TiedDenseLayer(Dense):
                 dtype=self.dtype,
                 trainable=True)
         self.built = True
+
+def eval_tensor(t):
+    return tf.Session().run(t)
+
+def tensor2const(t):
+    return tf.constant(eval_tensor(t))
+
+
+
+def _test_TiedDenseLayer_1(do_tied):
+    Rx = tensor2const(tf.random.uniform([1, 100]))
+    Ry = tensor2const(tf.random.uniform([1, 50]))
+    TDxy = TiedDenseLayer(units=50)
+    if do_tied:
+        TDxy.build(input_shape=(100,))  # must build TDxy if we want to tie TDyx to it - we need the kernel
+        TDyx = TiedDenseLayer(units=100, tied_kernel=tf.transpose(TDxy.kernel))
+    else:
+        TDyx = TiedDenseLayer(units=100)
+
+    assert (not tf.executing_eagerly())
+    inputs = tf.keras.Input(shape=(100,))  ##tensor=X)
+    outputs = TDxy(inputs)
+    Xreconstruct = TDyx(outputs)
+
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+
+    # model = tf.keras.models.Sequential([TDxy])
+    def combined_loss_func(y0, y1):
+        return (tf.losses.mean_squared_error(y0, y1) * 0.5 +
+                0.5 * tf.losses.mean_squared_error(inputs, Xreconstruct))
+
+
+    def XYloss(y_true, y_pred):
+        return tf.losses.mean_squared_error(y_true, y_pred)
+
+
+    def YXloss(y_true, y_pred):
+        return tf.losses.mean_squared_error(inputs, Xreconstruct)
+
+
+    loss_func = combined_loss_func
+
+    optimizer = tf.train.MomentumOptimizer(use_nesterov=True, learning_rate=0.001, momentum=0.8)
+    ##train_step = optimizer.minimize(loss)
+    model.compile(optimizer, loss=loss_func, metrics=[XYloss, YXloss])  ##'mean_squared_error')
+    log_dir = "/tmp/logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir)
+
+    model.fit(Rx, Ry, epochs=1500, steps_per_epoch=1, callbacks=[tensorboard_callback])
+
+def _test_TiedDenseLayer():
+    # the metrics YXloss should be much better when using tied layer
+    # you should be able to see this in the graph
+    _test_TiedDenseLayer_1(False)
+    _test_TiedDenseLayer_1(True)
 
 
 class TiedDropoutLayer(tf.layers.Dropout):
