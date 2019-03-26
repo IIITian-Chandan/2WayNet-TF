@@ -8,7 +8,7 @@ from tensorflow.python.keras.layers.core import Dense
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.keras import backend as K
 
-# for some reason tensor_shape.dimension_value is no found
+# for some reason tensor_shape.dimension_value is not found
 def dimension_value(dimension):
     if dimension is None:
         return dimension
@@ -153,7 +153,6 @@ class TiedDropoutLayer(tf.layers.Dropout):
         return super().build(input_shape)
 
     def call(self, inputs, training=None):
-        training = True
         if training is None:
           training = K.learning_phase()
 
@@ -168,7 +167,7 @@ class TiedDropoutLayer(tf.layers.Dropout):
         return output
 
 
-def _test_TiedDropoutLayer1(do_tied, rate):
+def _test_TiedDropoutLayer1_old(do_tied, rate):
     shape = (10,10)
     x = tf.ones(shape=shape)
     TD1 = TiedDropoutLayer(rate=rate)
@@ -183,14 +182,38 @@ def _test_TiedDropoutLayer1(do_tied, rate):
     return eval_tensor(count_y)
 
 
+def _test_TiedDropoutLayer1(do_tied, rate):
+    from tensorflow.keras.callbacks import History
+
+    shape = (1, 10,10)
+    x = tf.ones(shape=shape)
+    y = tf.ones(shape=shape)
+    assert (not tf.executing_eagerly())
+    TD1 = TiedDropoutLayer(rate=rate)
+    if do_tied:
+        TD1.build(x.shape)
+        TD2 = TiedDropoutLayer(rate=rate, tied_mask_variable=TD1.get_mask_varible())
+    else:
+        TD2 = TiedDropoutLayer(rate=rate)
+    inputs = tf.keras.Input(shape=(10,10))
+    outputs = TD2(TD1(inputs))
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    optimizer = tf.train.MomentumOptimizer(use_nesterov=True, learning_rate=0.001, momentum=0.8)
+    model.compile(optimizer, loss='mean_squared_error')
+    history = History()
+    model.fit(x, y, epochs=10, steps_per_epoch=1, callbacks=[history])
+    print(history.history)
+    return 7
+
 def _test_TiedDropoutLayer():
     # How we've tested TiedDropoutLayer -
     # Checked two dropout layer one on top of the other.
     # given drop_rate=p,  keep_rate = 1-p = q
     # we feed in a vector of 100 1.0
-    # if we count the non-zeor outputs - we expect to see
+    # if we count the non-zero outputs - we expect to see
     # q**2 probability of the outputs non zero (because we have two layers)
-    # if we tie the layers - the probablity should be like that of a single layer
+    # if we tie the layers - the probability should be like that of a single layer
+    K.set_learning_phase(1)
     rate = 0.25
     keep_rate = 1 - rate
     not_tied_list = [_test_TiedDropoutLayer1(False, rate = rate) for _ in range(100)]
@@ -200,6 +223,7 @@ def _test_TiedDropoutLayer():
     tied_list = [_test_TiedDropoutLayer1(True, rate = rate) for _ in range(100)]
     tied_rate = sum(tied_list) / len(tied_list) / 100.0
     print("tied_rate", tied_rate)
+    K.set_learning_phase(0)
     assert(abs(tied_rate/keep_rate - 1.0) < 0.15)  # 15% error
     assert(abs(not_tied_rate/(keep_rate**2) - 1.0) < 0.15)  # 15% error
 
