@@ -11,7 +11,13 @@ import configparser
 import os
 import sys
 
-def create_dataset(name, params):
+def create_dataset(name, config):
+    import params
+    cls_params = params.get_params_class_for_dataset_name(name)
+    params = cls_params(config)
+    # DEBUG
+    print(params.BN)
+    print(params.path)
 
 
 # import sys
@@ -95,16 +101,19 @@ def create_dataset(name, params):
 #         else:
 #             yield buffer[excerpt]
 #
-#
-#
+
+
+
+
 def run_model(data_set_config):
     model_results = {'train': [], 'validate': []}
     results_folder = os.path.join(os.getcwd(), 'results')
-#
+
     data_config = configparser.ConfigParser()
     data_config.read(data_set_config)
-    data_parameters = configparser.ConfigSectionMap("dataset_parameters", data_config)
-    print(data_parameters['name'], data_parameters)
+    data_parameters = data_config["dataset_parameters"]
+    for key in data_parameters:
+        print(f"data_parameters[{key}] = {data_parameters[key]}")
     # construct data set
     data_set = create_dataset(data_parameters['name'], data_parameters)
 #     data_set.load()

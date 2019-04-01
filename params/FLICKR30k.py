@@ -1,6 +1,7 @@
-from layers import *
+import params.DatasetConfig
+from layers.tied import *
 
-class FLICKR30k_Params(object):
+class FLICKR30k_Params(params.DatasetConfig.DatasetConfig):
     name = "FLICKR30k"
     # region Training Params
     BATCH_SIZE = 128

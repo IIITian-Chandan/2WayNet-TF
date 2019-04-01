@@ -1,6 +1,7 @@
-from layers import *
+import params.DatasetConfig
+from layers.tied import *
 
-class MNIST_Params(object):
+class MNIST_Params(params.DatasetConfig.DatasetConfig):
     """
     Parameters for the training and inference of the 2-WayNet
     """
@@ -31,7 +32,7 @@ class MNIST_Params(object):
     LAYER_SIZES = [392, 50, 392]  # Size of the hidden layers
     OUTPUT_LAYER = 1  # The layer from which to take the representations
     DROP_PROBABILITY = 0.5  # Probability for removing a neuron in the dropout/tied dropout layer
-    WEIGHT_INIT = lasagne.init.GlorotUniform()  # Initialization method for the weights
+    ###WEIGHT_INIT = lasagne.init.GlorotUniform()  # Initialization method for the weights
     LAYER_TYPES = [TiedDenseLayer, TiedDenseLayer, TiedDenseLayer,
                    TiedDenseLayer]  # Types of layers can be TiedDenseLayer or LocallyDenseLayer
     LEAKINESS = 0.3  # Leakiness coefficient
@@ -42,10 +43,3 @@ class MNIST_Params(object):
     SIMILARITY_METRIC = 'correlation'  # controls the type of distance metric to use in calculating matching
 
     # endregion
-
-    @classmethod
-    def print_params(cls):
-        OutputLog().write('Params:\n')
-        for (key, value) in cls.__dict__.iteritems():
-            if not key.startswith('__'):
-                OutputLog().write('{0}: {1}'.format(key, value))

@@ -1,6 +1,7 @@
-from layers import *
+import params.DatasetConfig
+from layers.tied import *
 
-class COCO_Params(object):
+class COCO_Params(params.DatasetConfig.DatasetConfig):
     name = "COCO"
     # region Training Params
     BATCH_SIZE = 128

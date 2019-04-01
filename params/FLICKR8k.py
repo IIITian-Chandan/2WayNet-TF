@@ -1,6 +1,7 @@
-from layers import *
+import params.DatasetConfig
+from layers.tied import *
 
-class FLICKR8k_Params(object):
+class FLICKR8k_Params(params.DatasetConfig.DatasetConfig):
     name = "FLICKR8k"
     # region Training Params
     BATCH_SIZE = 128
@@ -36,10 +37,3 @@ class FLICKR8k_Params(object):
     BN_ACTIVATION = True
     SIMILARITY_METRIC='correlation'
     # endregion
-
-    @classmethod
-    def print_params(cls):
-        OutputLog().write('Params:\n')
-        for (key, value) in cls.__dict__.iteritems():
-            if not key.startswith('__'):
-                OutputLog().write('{0}: {1}'.format(key, value))

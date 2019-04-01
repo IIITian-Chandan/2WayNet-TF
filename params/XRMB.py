@@ -1,7 +1,7 @@
-from layers import *
+import params.DatasetConfig
+from layers.tied import *
 
-
-class XRMB_Params:
+class XRMB_Params(params.DatasetConfig.DatasetConfig):
     name = "XRMB"
     # region Training Params
     BATCH_SIZE = 128
