@@ -193,7 +193,6 @@ def _test_TiedDropoutLayer1(do_tied, rate):
     TD1 = TiedDropoutLayer(rate=rate)
     if do_tied:
         TD1.build(x.shape)
-        print(f"DEBUG>>>> TD1.count_params {TD1.count_params}")
         TD2 = TiedDropoutLayer(rate=rate, tied_mask_variable=TD1.get_mask_varible())
     else:
         TD2 = TiedDropoutLayer(rate=rate)
