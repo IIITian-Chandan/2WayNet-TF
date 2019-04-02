@@ -1,11 +1,16 @@
 import params.DatasetConfig
 from layers.tied import *
+import datasets.base
 
 class MNIST_Params(params.DatasetConfig.DatasetConfig):
     """
     Parameters for the training and inference of the 2-WayNet
     """
+    # region Dataset
     name = "MNIST"
+    DATA_CLASS = datasets.base.MNISTDataset
+    # endregion
+
     # region Training Params
     BATCH_SIZE = 128  # number of samples in the batch for training
     VALIDATION_BATCH_SIZE = 1000  # number of samples in the batch for testing
@@ -41,5 +46,4 @@ class MNIST_Params(params.DatasetConfig.DatasetConfig):
     BN = True  # If True uses batch normalization
     BN_ACTIVATION = False  # Controls the order of non-linearity, if True the non-linearity is performed after the BN
     SIMILARITY_METRIC = 'correlation'  # controls the type of distance metric to use in calculating matching
-
     # endregion

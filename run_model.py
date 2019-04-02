@@ -16,8 +16,10 @@ def create_dataset(name, config):
     cls_params = params.get_params_class_for_dataset_name(name)
     params = cls_params(config)
     # DEBUG
-    print(params.BN)
-    print(params.path)
+    print("DEBUG>>>>", params.BN)
+    print("DEBUG>>>", params.path)
+    data_loader = params.DATA_CLASS(params)
+    data_loader.load()
 
 
 # import sys
