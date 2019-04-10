@@ -25,11 +25,18 @@ class XRMB_Params(params.DatasetConfig.DatasetConfig):
     # endregion
 
     # region Architecture
-    LAYER_SIZES = [560, 280, 112, 680, 1365]
-    TEST_LAYER = 1
+    LAYERS_SPEC = [
+        # format of a layer spec - (type, size)
+        # or a single layer - the representaton layer the format is (type, size, True)
+        # Types of layers can be TiedDenseLayer or LocallyDenseLayer
+        (TiedDenseLayer, 560, True),
+        (TiedDenseLayer, 280),
+        (TiedDenseLayer, 112),
+        (TiedDenseLayer, 680),
+        (TiedDenseLayer, 1365),
+        (TiedDenseLayer, -1),
+    ]
     DROP_PROBABILITY = [0.5, 0.5, 0.5]
-    WEIGHT_INIT = lasagne.init.GlorotUniform()
-    LAYER_TYPES = [TiedDenseLayer, TiedDenseLayer, TiedDenseLayer, TiedDenseLayer, TiedDenseLayer, TiedDenseLayer]
     LEAKINESS = 0.3
     LOCALLY_DENSE_M = 2
     NOISE_LAYER = TiedDropoutLayer

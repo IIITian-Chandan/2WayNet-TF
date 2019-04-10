@@ -10,101 +10,117 @@
 import configparser
 import os
 import sys
+import layers.tied
+import tensorflow as tf
+from tensorflow.keras.callbacks import History
+from tensorflow.keras.layers import LeakyReLU
+from tensorflow.keras.layers import BatchNormalization
+from tensorflow.keras.layers import concatenate
+
 
 def create_dataset(name, config):
     import params
     cls_params = params.get_params_class_for_dataset_name(name)
     params = cls_params(config)
     # DEBUG
-    print("DEBUG>>>>", params.BN)
-    print("DEBUG>>>", params.path)
     data_loader = params.DATA_CLASS(params)
-    data_loader.load()
+    return data_loader
 
+def build_model(data_set):
+    x_train = data_set.x_train()
+    y_train = data_set.y_train()
+    assert(len(x_train.shape) == 2) # TODO(franji): flatten!
+    assert(len(y_train.shape) == 2)
+    x_input_size = x_train.shape.as_list()[1]
+    y_input_size = y_train.shape.as_list()[1]
+    xy_input = tf.keras.Input(shape=(x_input_size + y_input_size,))
+    x_input = xy_input[:, :x_input_size]
+    y_input = xy_input[:, x_input_size:]
+    prev_layer_size = x_input_size
+    assert(len(y_train.shape) == 2)
+    y_ouput_size = y_train.shape[1]
+    layers_x_to_y = []
+    layers_y_to_x = []
+    is_last_layer = False
+    for spec in data_set.params().LAYERS_SPEC:
+        assert(not is_last_layer)
+        is_representation_layer = False
+        if len(spec) > 2:
+            is_representation_layer = spec[2]
+        layer_type = spec[0]
+        layer_size = spec[1]
+        if layer_size == -1:
+            layer_size = y_ouput_size
+            is_last_layer = True # size -1 is only for last layer
+        is_tied = layer_type in [layers.tied.TiedDenseLayer, layers.tied.LocallyDenseLayer]
+        LXY = layer_type(units=layer_size)
+        activation_xy = activation_yx = None
+        if not is_last_layer:
+            activation_xy = LeakyReLU(alpha=data_set.params().LEAKINESS)
+            activation_yx = LeakyReLU(alpha=data_set.params().LEAKINESS)
+        batch_norm_xy = batch_norm_yx = None
+        if not is_last_layer and data_set.params().BN:
+            batch_norm_xy = BatchNormalization()
+            batch_norm_yx = BatchNormalization()
+        # We need to build LXY so we can tie internal kernel to LYX
+        xy_input_shape = (None, prev_layer_size)
+        print(f"Layer X->Y build {type(LXY)}(units={layer_size},input_shape={xy_input_shape})")
+        LXY.build(input_shape=xy_input_shape)
+        # We use prev_layer_size as number of units to the reverse layer
+        layer_kwargs = dict(units=prev_layer_size)
+        if is_tied:
+            layer_kwargs["tied_layer"]=LXY
+        LYX = layer_type(**layer_kwargs)
+        print(f"Layer Y->X build {type(LYX)}(kwargs={layer_kwargs})")
+        noise_XY = noise_YX = None
+        if not is_last_layer and data_set.params().NOISE_LAYER:
+            noise_kwargs = dict(rate=data_set.params().DROP_PROBABILITY)
+            noise_XY = data_set.params().NOISE_LAYER(**noise_kwargs)
+            print(f"Noise X->Y build {type(noise_XY)}(input_shape={(None,layer_size)})")
+            noise_XY.build(input_shape=(None,layer_size))
+            if data_set.params().NOISE_LAYER == layers.tied.TiedDropoutLayer:
+                noise_kwargs["tied_layer"] = noise_XY
+            noise_YX = data_set.params().NOISE_LAYER(**noise_kwargs)
+        # Build channel x-->y
+        layers_x_to_y.append(LXY)
+        if data_set.params().BN_ACTIVATION:
+            layers_x_to_y.append(batch_norm_xy)
+            layers_x_to_y.append(activation_xy)
+        else:
+            layers_x_to_y.append(activation_xy)
+            layers_x_to_y.append(batch_norm_xy)
+        layers_x_to_y.append(noise_XY)
+        # Build channel x-->y in reverse
+        layers_y_to_x.append(LYX)
+        layers_y_to_x.append(noise_YX)
+        if data_set.params().BN_ACTIVATION:
+            # oposite from above if because reversed
+            layers_y_to_x.append(activation_yx)
+            layers_y_to_x.append(batch_norm_yx)
+        else:
+            layers_y_to_x.append(batch_norm_yx)
+            layers_y_to_x.append(activation_yx)
 
-# import sys
-# import cPickle
-# import lasagne
-# import numpy
-#
-# from collections import OrderedDict
-# from MISC.container import Container
-# from MISC.utils import ConfigSectionMap, batch_normalize_updates
-# from Models import tied_dropout_iterative_model
-# from params import Params
-#
-# import DataSetReaders
-#
-# OUTPUT_DIR = '/tmp'  ##r'/path/to/output'
-# VALIDATE_ALL = False
-# MEMORY_LIMIT = 8000000.
-#
-#
-# def iterate_parallel_minibatches(inputs_x, inputs_y, batchsize, shuffle=False, preprocessors=None):
-#     assert len(inputs_x) == len(inputs_y)
-#     if shuffle:
-#         indices = numpy.arange(len(inputs_x))
-#         numpy.random.shuffle(indices)
-#
-#     batch_limit = ceil(MEMORY_LIMIT / (inputs_x.shape[1] + inputs_y.shape[1]) / batchsize / 8.)
-#
-#     buffer_x = inputs_x
-#     buffer_y = inputs_y
-#
-#     if not isinstance(inputs_x, numpy.ndarray):
-#         buffer_x = numpy.load(inputs_x.filename, 'r')
-#
-#     if not isinstance(inputs_y, numpy.ndarray):
-#         buffer_y = numpy.load(inputs_y.filename, 'r')
-#
-#     for start_idx in range(0, len(inputs_x) - batchsize + 1, batchsize):
-#         if shuffle:
-#             excerpt = indices[start_idx:start_idx + batchsize]
-#         else:
-#             excerpt = slice(start_idx, start_idx + batchsize)
-#
-#         if (start_idx / batchsize) % batch_limit == 0:
-#
-#             buffer_x = inputs_x
-#             buffer_y = inputs_y
-#             if not isinstance(inputs_x, numpy.ndarray):
-#                 buffer_x = numpy.load(inputs_x.filename, 'r')
-#
-#             if not isinstance(inputs_y, numpy.ndarray):
-#                 buffer_y = numpy.load(inputs_y.filename, 'r')
-#
-#         if preprocessors is not None:
-#             yield preprocessors[0](numpy.copy(buffer_x[excerpt])), \
-#                   preprocessors[1](numpy.copy(buffer_y[excerpt]))
-#         else:
-#             yield buffer_x[excerpt], buffer_y[excerpt]
-#
-#
-# def iterate_single_minibatch(inputs, batchsize, shuffle=False, preprocessor=None):
-#     if shuffle:
-#         indices = numpy.arange(len(inputs))
-#         numpy.random.shuffle(indices)
-#
-#     batch_limit = ceil(MEMORY_LIMIT / inputs.shape[1] / batchsize / 4.)
-#
-#     buffer = numpy.load(inputs.filename, 'r')
-#
-#     for start_idx in range(0, len(inputs) - batchsize + 1, batchsize):
-#         if shuffle:
-#             excerpt = indices[start_idx:start_idx + batchsize]
-#         else:
-#             excerpt = slice(start_idx, start_idx + batchsize)
-#
-#         if (start_idx / batchsize) % batch_limit == 0:
-#             buffer = numpy.load(inputs.filename, 'r')
-#
-#         if preprocessor is not None:
-#             yield preprocessor(numpy.copy(buffer[excerpt]))
-#         else:
-#             yield buffer[excerpt]
-#
+        prev_layer_size = layer_size
 
+    channel_x_to_y = x_input
+    for lay in layers_x_to_y:
+        if lay is None:
+            continue
+        print(type(channel_x_to_y))
+        channel_x_to_y = lay(channel_x_to_y)
 
+    channel_y_to_x = y_input
+    for lay in reversed(layers_y_to_x):
+        if lay is None:
+            continue
+        print(type(channel_y_to_x))
+        channel_y_to_x = lay(channel_y_to_x)
+    xy_output = concatenate([channel_x_to_y, channel_y_to_x], axis=1)
+    model = tf.keras.Model(input=xy_input, output=xy_output)
+    optimizer = tf.train.MomentumOptimizer(use_nesterov=True, learning_rate=0.01, momentum=0.8)
+    model.compile(optimizer, loss='mean_squared_error')
+    return model
 
 
 def run_model(data_set_config):
@@ -118,136 +134,11 @@ def run_model(data_set_config):
         print(f"data_parameters[{key}] = {data_parameters[key]}")
     # construct data set
     data_set = create_dataset(data_parameters['name'], data_parameters)
-#     data_set.load()
-#
-#     y_var = tensor.matrix()
-#     x_var = tensor.matrix()
-#
-#     model = tied_dropout_iterative_model
-#
-#     Params.print_params()
-#
-#     OutputLog().write('Model: {0}'.format(model.__name__))
-#
-#     # Export network
-#     path = OutputLog().output_path
-#
-#     x_train = data_set.trainset[0]
-#     y_train = data_set.trainset[1]
-#
-#     model_x, model_y, hidden_x, hidden_y, loss, outputs, hooks = model.build_model(x_var,
-#                                                                                    x_train.shape[1],
-#                                                                                    y_var,
-#                                                                                    y_train.shape[1],
-#                                                                                    layer_sizes=Params.LAYER_SIZES,
-#                                                                                    weight_init=Params.WEIGHT_INIT)
-#
-#     params_x = lasagne.layers.get_all_params(model_x, trainable=True)
-#     params_y = lasagne.layers.get_all_params(model_y, trainable=True)
-#
-#     if hooks:
-#         updates = OrderedDict(batch_normalize_updates(hooks, 100))
-#     else:
-#         updates = OrderedDict()
-#
-#     params_x.extend(params_y)
-#
-#     params = lasagne.utils.unique(params_x)
-#
-#     current_learning_rate = Params.BASE_LEARNING_RATE
-#
-#     updates.update(
-#         lasagne.updates.nesterov_momentum(loss, params, learning_rate=current_learning_rate, momentum=Params.MOMENTUM))
-#
-#     train_fn = theano.function([x_var, y_var], [loss] + outputs.values(), updates=updates)
-#
-#     inference_model_y = theano.function([x_var],
-#                                         [lasagne.layers.get_output(layer, moving_avg_hooks=hooks, deterministic=True)
-#                                          for layer in
-#                                          hidden_x],
-#                                         on_unused_input='ignore')
-#     inference_model_x = theano.function([y_var],
-#                                         [lasagne.layers.get_output(layer, moving_avg_hooks=hooks, deterministic=True)
-#                                          for layer in
-#                                          hidden_y],
-#                                         on_unused_input='ignore')
-#
-#     batch_number = data_set.trainset[0].shape[0] / Params.BATCH_SIZE
-#
-#     output_string = '{0}/{1} loss: {2} '
-#     output_string += ' '.join(['{0}:{{{1}}}'.format(key, index + 3) for index, key in enumerate(outputs.keys())])
-#
-#     for epoch in range(Params.EPOCH_NUMBER):
-#         OutputLog().write('Epoch {0}'.format(epoch))
-#
-#         model_results['train'].append({'loss': []})
-#         model_results['validate'].append({})
-#
-#         for label in outputs.keys():
-#             model_results['train'][epoch][label] = []
-#
-#         for index, batch in enumerate(
-#                 iterate_parallel_minibatches(x_train, y_train, Params.BATCH_SIZE, False, data_set.preprocessors)):
-#             input_x, input_y = batch
-#             train_loss = train_fn(numpy.cast[theano.config.floatX](input_x),
-#                                   numpy.cast[theano.config.floatX](input_y))
-#
-#             model_results['train'][epoch]['loss'].append(train_loss[0])
-#             for label, value in zip(outputs.keys(), train_loss[1:]):
-#                 model_results['train'][epoch][label].append(value)
-#
-#             OutputLog().write(output_string.format(index, batch_number, *train_loss))
-#
-#             del batch, input_x, input_y
-#             del train_loss
-#
-#         if Params.CROSS_VALIDATION or epoch in Params.DECAY_EPOCH:
-#             tuning_x = data_set.tuning[0]
-#             tuning_y = data_set.tuning[1]
-#
-#             OutputLog().write('\nValidating model\n')
-#
-#             test_model(inference_model_x, inference_model_y, tuning_x, tuning_y, OUTPUT_DIR, preprocessors=data_set.preprocessors,
-#                        reduce=data_set.reduce_val)
-#
-#         if epoch in Params.DECAY_EPOCH:
-#             current_learning_rate *= Params.DECAY_RATE
-#             if hooks:
-#                 updates = OrderedDict(batch_normalize_updates(hooks, 100))
-#             else:
-#                 updates = OrderedDict()
-#
-#             with file(os.path.join(path, 'model_x_{0}.p'.format(epoch)), 'w') as model_x_file:
-#                 cPickle.dump(model_x, model_x_file)
-#
-#             with file(os.path.join(path, 'model_y{0}.p'.format(epoch)), 'w') as model_y_file:
-#                 cPickle.dump(model_y, model_y_file)
-#
-#             updates.update(
-#                 lasagne.updates.nesterov_momentum(loss, params, learning_rate=current_learning_rate,
-#                                                   momentum=Params.MOMENTUM))
-#             del train_fn
-#             train_fn = theano.function([x_var, y_var], [loss] + outputs.values(), updates=updates)
-#
-#     OutputLog().write('Test results')
-#
-#     try:
-#         test_model(inference_model_x, inference_model_y, data_set.testset[0],
-#                    data_set.testset[1], OUTPUT_DIR, preprocessors=data_set.preprocessors,
-#                    reduce=data_set.reduce_val)
-#     except Exception as e:
-#         OutputLog().write('Error testing model with exception {0}'.format(e))
-#         traceback.print_exc()
-#
-#     with file(os.path.join(path, 'model_x.p'), 'w') as model_x_file:
-#         cPickle.dump(model_x, model_x_file)
-#
-#     with file(os.path.join(path, 'model_y.p'), 'w') as model_y_file:
-#         cPickle.dump(model_y, model_y_file)
-#
-#     with file(os.path.join(path, 'results.p'), 'w') as results_file:
-#         cPickle.dump(model_results, results_file)
-#
+    data_set.load()
+    model = build_model(data_set)
+    history = History()
+    model.fit(data_set.x_train(), data_set.y_train, epochs=50, steps_per_epoch=100, callbacks=[history])
+
 
 def main(argv):
     if len(argv) < 2:

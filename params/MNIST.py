@@ -34,12 +34,17 @@ class MNIST_Params(params.DatasetConfig.DatasetConfig):
     # endregion
 
     # region Architecture
-    LAYER_SIZES = [392, 50, 392]  # Size of the hidden layers
-    OUTPUT_LAYER = 1  # The layer from which to take the representations
+    LAYERS_SPEC = [
+        # format of a layer spec - (type, size)
+        # or a single layer - the representaton layer the format is (type, size, True)
+        # Types of layers can be TiedDenseLayer or LocallyDenseLayer
+        # size==-1 is for the output layer. the size is same as output
+        #(TiedDenseLayer, 392),
+        (TiedDenseLayer, 50, True),
+        #(TiedDenseLayer, 392),
+        (TiedDenseLayer, -1)
+    ]
     DROP_PROBABILITY = 0.5  # Probability for removing a neuron in the dropout/tied dropout layer
-    ###WEIGHT_INIT = lasagne.init.GlorotUniform()  # Initialization method for the weights
-    LAYER_TYPES = [TiedDenseLayer, TiedDenseLayer, TiedDenseLayer,
-                   TiedDenseLayer]  # Types of layers can be TiedDenseLayer or LocallyDenseLayer
     LEAKINESS = 0.3  # Leakiness coefficient
     LOCALLY_DENSE_M = 2  # The number of sub-dense layer in the locally dense layer
     NOISE_LAYER = TiedDropoutLayer  # The type of dropout layer can be TiedDropoutLayer or Dropoutlayer

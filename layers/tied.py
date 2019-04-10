@@ -33,6 +33,12 @@ def _dense_layer_input_spec(input_shape):
 class TiedDenseLayer(Dense):
     def __init__(self, *args, **kwargs):
         self.tied_kernel = kwargs.pop('tied_kernel', None)
+        self.tied_layer = kwargs.pop('tied_layer', None)
+        if self.tied_layer:
+            # Note - using only kernel , not bias from tied_layer
+            if self.tied_kernel:
+                raise ValueError("if tied_layer provided - tied_kernel should not be.")
+            self.tied_kernel = tf.transpose(self.tied_layer.kernel)
         self.tied_bias = kwargs.pop('tied_bias', None)
         super().__init__(*args, **kwargs)
 
@@ -145,6 +151,11 @@ class TiedDropoutLayer(tf.layers.Dropout):
     def __init__(self, *args, **kwargs):
         # tied_mask_variable is a "keep" mask with "1" where to keep the input.
         self.tied_mask_variable = kwargs.pop('tied_mask_variable', None)
+        self.tied_layer = kwargs.pop('tied_layer', None)
+        if self.tied_layer:
+            if self.tied_mask_variable:
+                raise ValueError("if tied_layer provided - tied_mask_variable should not be.")
+            self.tied_mask_variable = self.tied_layer.get_mask_varible()
         super().__init__(*args, **kwargs)
         self.mask_variable = None
         self.mask_compute = None
@@ -238,6 +249,14 @@ class LocallyDenseLayer(tf.layers.Layer):
         self.interleave = kwargs.pop('interleave', None)
         self.not_tied_for_testing = kwargs.pop('not_tied_for_testing', None)
         self.dense_layers = []
+        self.tied_kernel = kwargs.pop('tied_kernel', None)
+        self.tied_layer = kwargs.pop('tied_layer', None)
+        if self.tied_layer:
+            # Note - using only kernel , not bias from tied_layer
+            if self.tied_kernel:
+                raise ValueError("if tied_layer provided - tied_kernel should not be.")
+            self.tied_kernel = tf.transpose(self.tied_layer.get_kernel())
+        self.tied_bias = kwargs.pop('tied_bias', None)
         super().__init__(*args, **kwargs)
 
     def _validate_reduction_ratio(self, kw_dict):
@@ -252,6 +271,9 @@ class LocallyDenseLayer(tf.layers.Layer):
                 self.units, reduction_ratio))
         return reduction_ratio
 
+    def get_kernel(self):
+        # used to link
+        return self.dense_layers[0].kernel
 
     def build(self, input_shape):
         if self.built:
@@ -264,12 +286,16 @@ class LocallyDenseLayer(tf.layers.Layer):
                 last_dim, self.reduction_ratio ))
         input_slice_shape[-1] = last_dim // self.reduction_ratio
         self.dense_layers = []
-        tied_kernel = None
-        tied_bias = None
+        tied_kernel = self.tied_kernel
+        tied_bias = self.tied_bias
         split_units = self.units // self.reduction_ratio
         for _ in range(self.reduction_ratio):
-            # the first of these TiedDenseLayer recieves tied_kernel=None
-            # and creates intenal kernel. This kernell is then passed to all the others
+            if self.not_tied_for_testing:
+                # allow independent dense layers for testing
+                tied_kernel = None
+                tied_bias = None
+            # the first of these TiedDenseLayer recieves tied_kernel=None or the auxilary kernel
+            # and creates intenal kernel. This kernel is then passed to all the others
             td = TiedDenseLayer(units=split_units, tied_kernel=tied_kernel, tied_bias=tied_bias)
             td.build(input_slice_shape)
             # need to add inner layers to this layers trainable variables
@@ -277,10 +303,6 @@ class LocallyDenseLayer(tf.layers.Layer):
             self._trainable_weights.extend(td.trainable_weights)
             tied_kernel = td.kernel
             tied_bias = td.bias
-            if self.not_tied_for_testing:
-                # allow independent dense layers for testing
-                tied_kernel = None
-                tied_bias = None
             self.dense_layers.append(td)
         self.built = True
 
