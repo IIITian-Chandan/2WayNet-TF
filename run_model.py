@@ -239,7 +239,7 @@ def run_model(data_set_config):
     data_set.load()
     log_dir = "/Users/talfranji/tmp/log/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     if use_tensorboardcolab:
-        tensorboard_callback = TensorBoardImage(g_tensorboard_colab, log_dir=log_dir)
+        tensorboard_callback = TensorBoardImage(g_tensorboard_colab)
     else:
         tensorboard_callback = TensorBoardImage(log_dir=log_dir)
     model = build_model(data_set, tensorboard_callback)
