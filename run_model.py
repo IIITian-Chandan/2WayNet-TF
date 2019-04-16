@@ -12,55 +12,11 @@ import os
 import sys
 
 from tensorflow.python.keras import losses
-import datetime
 import layers.tied
 import tensorflow as tf
-from tensorflow.keras.callbacks import Callback
-from tensorflow.keras.callbacks import History
-from tensorflow.keras.callbacks import TensorBoard
 from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import BatchNormalization
-from tensorflow.keras.layers import concatenate
-
-# some magic to allow using tensor board both on laptop and on Google Colab
-try:
-    from tensorboardcolab import TensorBoardColab, TensorBoardColabCallback
-    g_tensorboard_colab = TensorBoardColab()
-    class_callback_TensorBoard = TensorBoardColabCallback
-    use_tensorboardcolab = True
-except:
-    use_tensorboardcolab = False
-    class_callback_TensorBoard = TensorBoard
-
-
-class TensorBoardImage(class_callback_TensorBoard):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.image_tensors = []
-        self.image_tags = []
-
-    def add_image_tensors(self, tensors, tags):
-        assert(len(tensors) == len(tags))
-        self.image_tensors.extend(tensors)
-        self.image_tags.extend(tags)
-
-    def on_epoch_end(self, epoch, logs={}):
-        super().on_epoch_end(epoch, logs)
-        sess = tf.keras.backend.get_session()
-        ##tensors = [sess.run(t) for t in self.image_tensors]
-
-        for img, tag in zip(self.image_tensors, self.image_tags):
-            writer = tf.summary.FileWriter(self.log_dir)
-            img_gray = tf.stack([img], axis=2) # tf.summary.image wants 4D tensor
-            img_gray = tf.stack([img_gray], axis=0)
-            writer.add_summary(sess.run(tf.summary.image(tag, img_gray)))
-            writer.close()
-
-        return
-
-    def on_batch_end(self, batch, logs={}):
-        super().on_batch_end(batch, logs)
-
+import tensorboardimage
 
 def create_dataset(name, config):
     import params
@@ -196,28 +152,10 @@ def build_model(data_set, tensorboard_callback):
         return loss_x + loss_y + loss_representation
 
     # add images to see what's going on:
-    # this is dataset specific
-    # TODO(franji): move into the data set somehow
-    def to_img(t, var_name):
-        shape = (14, 28)
-        img_var = tf.keras.backend.variable(tf.zeros(shape=shape, dtype=tf.uint8),
-                                                    name=var_name, dtype=tf.uint8)
-        # use t[0] - first in the batch
-        img = tf.reshape(tf.cast(t[0] * 255, tf.uint8), shape=(14,28))
-        return tf.assign(img_var, img), img_var
+    dummy_metic_for_images, image_variables = data_set.get_tb_image_varibles(
+        x_input, y_input, channel_y_to_x, channel_x_to_y)
 
-    assign_x_input_image, x_input_image = to_img(x_input, "x_input_image")
-    assign_x_output_image, x_output_image = to_img(channel_y_to_x, "x_output_image")
-    assign_y_input_image, y_input_image = to_img(y_input, "y_input_image")
-    assign_y_output_image, y_output_image = to_img(channel_x_to_y, "y_output_image")
-    tensorboard_callback.add_image_tensors([x_input_image, x_output_image, y_input_image, y_output_image],
-                                           ["x_input", "x_output", "y_input", "y_output"])
-    def dummy_metic_for_images(_y_true_unused, _y_pred_unused):
-        return (tf.reduce_sum(assign_x_input_image) +
-                tf.reduce_sum(assign_x_output_image) +
-                tf.reduce_sum(assign_y_input_image) +
-                tf.reduce_sum(assign_y_output_image))
-
+    tensorboard_callback.add_image_variables(image_variables)
     model = tf.keras.Model(inputs=[x_input, y_input],
                            outputs=[channel_x_to_y, channel_y_to_x])
     optimizer = tf.train.MomentumOptimizer(use_nesterov=True, learning_rate=0.01, momentum=0.8)
@@ -237,18 +175,14 @@ def run_model(data_set_config):
     # construct data set
     data_set = create_dataset(data_parameters['name'], data_parameters)
     data_set.load()
-    log_dir = "/Users/talfranji/tmp/log/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    if use_tensorboardcolab:
-        tensorboard_callback = TensorBoardImage(g_tensorboard_colab)
-    else:
-        tensorboard_callback = TensorBoardImage(log_dir=log_dir)
-    model = build_model(data_set, tensorboard_callback)
-    #history = History()
 
+    tensorboard_callback = tensorboardimage.create_tensorboard_callback()
+    model = build_model(data_set, tensorboard_callback)
     model.fit([data_set.x_train(), data_set.y_train()],
               [data_set.y_train(), data_set.x_train()],
               epochs=50, steps_per_epoch=100, callbacks=[tensorboard_callback]
               )
+
 
 def debug_game():
     with tf.Session() as sess:
