@@ -164,8 +164,9 @@ class TiedDropoutLayer(tf.layers.Dropout):
         # assuming shape[0] is batch size
         random_tensor = tf.random.uniform(shape[1:], dtype=dtype)
         keep_mask = random_tensor >= self.rate
-        self.mask_variable = tf.Variable(tf.ones(shape=shape[1:], dtype=tf.bool),
-                        name="tied_mask_variable", use_resource=True)
+        # for tf.Variable (use_resource=True)
+        self.mask_variable = tf.keras.backend.variable(tf.ones(shape=shape[1:], dtype=tf.bool),
+                        name="tied_mask_variable", dtype=tf.bool)
         self.mask_compute = tf.assign(self.mask_variable, keep_mask)
 
     def get_mask_varible(self):
@@ -400,3 +401,5 @@ def _test_all():
     _test_LocallyDenseLayer()
     _test_TiedDropoutLayer()
     _test_LocallyDenseLayer()
+
+#_test_all()

@@ -39,9 +39,9 @@ class MNIST_Params(params.DatasetConfig.DatasetConfig):
         # or a single layer - the representaton layer the format is (type, size, True)
         # Types of layers can be TiedDenseLayer or LocallyDenseLayer
         # size==-1 is for the output layer. the size is same as output
-        #(TiedDenseLayer, 392),
+        (TiedDenseLayer, 392),
         (TiedDenseLayer, 50, True),
-        #(TiedDenseLayer, 392),
+        (TiedDenseLayer, 392),
         (TiedDenseLayer, -1)
     ]
     DROP_PROBABILITY = 0.5  # Probability for removing a neuron in the dropout/tied dropout layer
