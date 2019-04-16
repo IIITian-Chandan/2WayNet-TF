@@ -22,8 +22,18 @@ from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.layers import concatenate
 
+# some magic to allow using tensor board both on laptop and on Google Colab
+try:
+    from tensorboardcolab import TensorBoardColab, TensorBoardColabCallback
+    g_tensorboard_colab = TensorBoardColab()
+    class_callback_TensorBoard = TensorBoardColabCallback
+    use_tensorboardcolab = True
+except:
+    use_tensorboardcolab = False
+    class_callback_TensorBoard = TensorBoard
 
-class TensorBoardImage(TensorBoard):
+
+class TensorBoardImage(class_callback_TensorBoard):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.image_tensors = []
@@ -228,7 +238,10 @@ def run_model(data_set_config):
     data_set = create_dataset(data_parameters['name'], data_parameters)
     data_set.load()
     log_dir = "/Users/talfranji/tmp/log/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    tensorboard_callback = TensorBoardImage(log_dir=log_dir)
+    if use_tensorboardcolab:
+        tensorboard_callback = TensorBoardImage(g_tensorboard_colab, log_dir=log_dir)
+    else:
+        tensorboard_callback = TensorBoardImage(log_dir=log_dir)
     model = build_model(data_set, tensorboard_callback)
     #history = History()
 
