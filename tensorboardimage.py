@@ -1,4 +1,5 @@
 import datetime
+import os
 import tensorflow as tf
 from tensorflow.keras.callbacks import TensorBoard
 
@@ -33,12 +34,21 @@ class TensorBoardImage(class_callback_TensorBoard):
             writer = tf.summary.FileWriter(self.log_dir)
             img_gray = tf.stack([var], axis=2) # tf.summary.image wants 4D tensor
             img_gray = tf.stack([img_gray], axis=0)
-            writer.add_summary(sess.run(tf.summary.image(var.name, img_gray)))
+            name = var.name.replace(":", "_")
+            writer.add_summary(sess.run(tf.summary.image(name, img_gray)))
             writer.close()
 
         return
 
-g_log_dir = "/Users/talfranji/tmp/log/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+def find_base_log_dir():
+    for s in ["/Users/talfranji/tmp", "/content"]:
+        if os.path.isdir(s):
+            logs = os.path.join(s, "log")
+            if not os.path.isdir(logs):
+                os.mkdir(logs)
+            return logs
+
+g_log_dir = find_base_log_dir() + "/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 def create_tensorboard_callback():
     if use_tensorboardcolab:
         tensorboard_callback = TensorBoardImage(g_tensorboard_colab)
