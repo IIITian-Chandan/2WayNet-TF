@@ -181,7 +181,7 @@ def run_model(data_set_config):
     model.fit([data_set.x_train(), data_set.y_train()],
               [data_set.y_train(), data_set.x_train()],
               epochs=data_set.params().EPOCH_NUMBER,
-              steps_per_epoch=len(data_set.x_train()),
+              steps_per_epoch=data_set.x_train().shape[0],
               batch_size=data_set.params().BATCH_SIZE,
               callbacks=[tensorboard_callback]
               )
