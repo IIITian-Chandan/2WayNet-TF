@@ -41,7 +41,7 @@ class TensorBoardImage(class_callback_TensorBoard):
         return
 
 def find_base_log_dir():
-    for s in ["/Users/talfranji/tmp", "/content"]:
+    for s in ["/content", "/Users/talfranji/tmp"]:
         if os.path.isdir(s):
             logs = os.path.join(s, "log")
             if not os.path.isdir(logs):
