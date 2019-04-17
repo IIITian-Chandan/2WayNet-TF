@@ -36,10 +36,10 @@ class MNISTDataset(BaseDataset):
         flat_train = flatten(z_train)
         flat_test = flatten(z_test)
         # upper half of image
-        self._x_train = flat_train[:1000,:img_sz // 2]
+        self._x_train = flat_train[:100,:img_sz // 2]
         self._x_test = flat_test[:,:img_sz // 2]
         # lower half of image
-        self._y_train = flat_train[:1000,img_sz // 2:]
+        self._y_train = flat_train[:100,img_sz // 2:]
         self._y_test = flat_test[:,img_sz // 2:]
 
     def x_train(self):

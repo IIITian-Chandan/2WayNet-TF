@@ -3,13 +3,17 @@ import tensorflow as tf
 from tensorflow.keras.callbacks import TensorBoard
 
 # some magic to allow using tensor board both on laptop and on Google Colab
-try:
-    from tensorboardcolab import TensorBoardColab, TensorBoardColabCallback
-    g_tensorboard_colab = TensorBoardColab()
-    class_callback_TensorBoard = TensorBoardColabCallback
-    use_tensorboardcolab = True
-except:
-    use_tensorboardcolab = False
+use_tensorboardcolab = False
+if use_tensorboardcolab:
+    try:
+        from tensorboardcolab import TensorBoardColab, TensorBoardColabCallback
+        g_tensorboard_colab = TensorBoardColab()
+        class_callback_TensorBoard = TensorBoardColabCallback
+        use_tensorboardcolab = True
+    except:
+        use_tensorboardcolab = False
+
+if not use_tensorboardcolab:
     class_callback_TensorBoard = TensorBoard
 
 
