@@ -181,37 +181,10 @@ def run_model(data_set_config):
     model.fit([data_set.x_train(), data_set.y_train()],
               [data_set.y_train(), data_set.x_train()],
               epochs=data_set.params().EPOCH_NUMBER,
-              steps_per_epoch=data_set.x_train().shape.dims[0].value,
+              steps_per_epoch=1000, ##data_set.x_train().shape.dims[0].value,
               batch_size=data_set.params().BATCH_SIZE,
               callbacks=[tensorboard_callback]
               )
-
-
-def debug_game():
-    with tf.Session() as sess:
-        shape = (14, 28)
-        img_var = tf.keras.backend.variable(tf.zeros(shape=shape, dtype=tf.uint8),
-                                            name="test_img_var", dtype=tf.uint8)
-        v = tf.random.uniform(
-            shape,
-            minval=0,
-            maxval=255,
-            dtype=tf.int32,
-
-        )
-        img = tf.reshape(tf.cast(v, tf.uint8), shape=shape)
-        assign = tf.assign(img_var, img)
-        sess.run(assign)
-        tensors = [img]
-
-        for img, tag in zip(tensors, ["test_image"]):
-            # image = make_image(img)
-            writer = tf.summary.FileWriter("/Users/talfranji/tmp/log/")
-            img_gray = tf.stack([img], axis=2)
-            img_gray = tf.stack([img_gray], axis=0)
-            writer.add_summary(sess.run(tf.summary.image(tag, img_gray)))
-            writer.flush()
-            writer.close()
 
 
 def main(argv):
