@@ -29,19 +29,23 @@ def create_dataset(name, config):
 
 BOOKMARK_REPRESENTATION_LAYER = "representation_layer"
 
+def shape_i(shape, i):
+    if isinstance(shape, tuple):
+        return shape[i]
+    return shape.as_list()[i]
 
 def build_model(data_set, tensorboard_callback):
     x_train = data_set.x_train()
     y_train = data_set.y_train()
     assert(len(x_train.shape) == 2) # TODO(franji): flatten!
     assert(len(y_train.shape) == 2)
-    x_input_size = x_train.shape.as_list()[1]
-    y_input_size = y_train.shape.as_list()[1]
+    x_input_size = shape_i(x_train.shape, 1)
+    y_input_size = shape_i(y_train.shape, 1)
     x_input = tf.keras.Input(shape=(x_input_size,))
     y_input = tf.keras.Input(shape=(y_input_size,))
     prev_layer_size = x_input_size
     assert(len(y_train.shape) == 2)
-    y_ouput_size = y_train.shape[1]
+    y_ouput_size = shape_i(y_train.shape, 1)
     layers_x_to_y = []
     layers_y_to_x = []
     is_last_layer = False
