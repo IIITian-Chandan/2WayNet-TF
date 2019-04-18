@@ -52,29 +52,15 @@ class MNISTDataset(BaseDataset):
     def y_test(self):
         return self._y_test
     def get_tb_image_varibles(self, x_input, y_input, x_output, y_output):
-        """get the 2 channels input and output
-        return a list of variables containing the image tensorss for TensorBoard
-        and a function-clousure to do the assignment of the x/y_input/ouput to the variables.
-        the returned metric_assignment_func is of type f(y_pred, y_true)
-        return: metric_assignment_func, [variables]"""
+        shape1 = (14, 28)
+        img_tensors = [tf.reshape(tf.cast(t[0] * 255, tf.uint8), shape=shape1) for t in
+                       [x_input, y_input, x_output, y_output]]
+        full_img = tf.concat(img_tensors, axis=0)
 
-        def to_img(t, var_name):
-            shape = (14, 28)
-            img_var = tf.keras.backend.variable(tf.zeros(shape=shape, dtype=tf.uint8),
-                                                name=var_name, dtype=tf.uint8)
-            # use t[0] - first in the batch
-            img = tf.reshape(tf.cast(t[0] * 255, tf.uint8), shape=(14, 28))
-            return tf.assign(img_var, img), img_var
-
-        assign_x_input_image, x_input_image = to_img(x_input, "x_input_image")
-        assign_x_output_image, x_output_image = to_img(x_output, "x_output_image")
-        assign_y_input_image, y_input_image = to_img(y_input, "y_input_image")
-        assign_y_output_image, y_output_image = to_img(y_output, "y_output_image")
+        img_var = tf.keras.backend.variable(tf.zeros(shape=(shape1[0] * 4, shape1[1]), dtype=tf.uint8),
+                                        name="x_y_in_out", dtype=tf.uint8)
 
         def dummy_metic_for_images(_y_true_unused, _y_pred_unused):
-            return (tf.reduce_sum(assign_x_input_image) +
-                    tf.reduce_sum(assign_x_output_image) +
-                    tf.reduce_sum(assign_y_input_image) +
-                    tf.reduce_sum(assign_y_output_image))
-        return dummy_metic_for_images, [x_input_image, x_output_image, y_input_image, y_output_image]
+            return tf.reduce_sum(tf.assign(img_var, full_img))
+        return dummy_metic_for_images, [img_var]
 
