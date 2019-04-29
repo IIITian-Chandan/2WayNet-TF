@@ -36,7 +36,7 @@ class MNISTDataset(BaseDataset):
             x_train, y_train = tf.split(z_train, 2, axis=2)
             x_test, y_test = tf.split(z_train, 2, axis=2)
             def flatten(z):
-                return tf.reshape(z / 255.0, shape=(z.shape[0], half_sz))
+                return tf.reshape(tf.cast(z, dtype=tf.float16) / 255.0, shape=(z.shape[0], half_sz))
             # left half of image
             self._x_train = sess.run(flatten(x_train))
             self._x_test = sess.run(flatten(x_test))
