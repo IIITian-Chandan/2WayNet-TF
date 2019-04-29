@@ -32,16 +32,17 @@ class MNISTDataset(BaseDataset):
             (z_train, label_train),(z_test, label_test) = mnist.load_data()
             # are the full images - out x and y are the two halves of the images
             img_sz = z_train.shape[1] * z_train.shape[2]
+            half_sz = img_sz // 2
+            x_train, y_train = tf.split(z_train, 2, axis=2)
+            x_test, y_test = tf.split(z_train, 2, axis=2)
             def flatten(z):
-                return tf.reshape(z / 255.0, shape=(z.shape[0], img_sz))
-            flat_train = flatten(z_train)
-            flat_test = flatten(z_test)
-            # upper half of image
-            self._x_train = sess.run(flat_train[:,:img_sz // 2])
-            self._x_test = sess.run(flat_test[:,:img_sz // 2])
-            # lower half of image
-            self._y_train = sess.run(flat_train[:,img_sz // 2:])
-            self._y_test = sess.run(flat_test[:,img_sz // 2:])
+                return tf.reshape(z / 255.0, shape=(z.shape[0], half_sz))
+            # left half of image
+            self._x_train = sess.run(flatten(x_train))
+            self._x_test = sess.run(flatten(x_test))
+            # right half of image
+            self._y_train = sess.run(flatten(y_train))
+            self._y_test = sess.run(flatten(y_test))
 
     def x_train(self):
         return self._x_train
