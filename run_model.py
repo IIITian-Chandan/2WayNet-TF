@@ -19,6 +19,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import BatchNormalization
 import tensorboardimage
+from tensorflow.keras import backend as K
 
 def create_dataset(name, config):
     import params
@@ -28,6 +29,11 @@ def create_dataset(name, config):
     data_loader = params.DATA_CLASS(params)
     return data_loader
 
+# TODO(franji): remove if not used for gamma regulazation in BatchNormalization
+def inverse_l2_reg_func(coeff):
+    def reg(weight_matrix):
+        return K.sum(coeff * K.square(1.0/weight_matrix))
+    return reg
 
 BOOKMARK_REPRESENTATION_LAYER = "representation_layer"
 
@@ -70,6 +76,12 @@ def build_model(data_set, tensorboard_callback):
             activation_yx = LeakyReLU(alpha=data_set.params().LEAKINESS)
         batch_norm_xy = batch_norm_yx = None
         if not is_last_layer and data_set.params().BN:
+            # TODO(franji): investigate the gamma regularization
+            # the paper says the use gamma regulazation
+            # the orignal code uses l2(1/gamma) - but this does not make sense
+            # since it causes gamma to grow. And indeed using:
+            ##BatchNormalization(gamma_regularizer=inverse_l2_reg_func(data_set.params().GAMMA_COEF))
+            # causes saturation at epoc 17/60 on MNIST
             batch_norm_xy = BatchNormalization()
             batch_norm_yx = BatchNormalization()
         # We need to build LXY so we can tie internal kernel to LYX
@@ -150,13 +162,28 @@ def build_model(data_set, tensorboard_callback):
     loss_x = data_set.params().LOSS_X * losses.mean_squared_error(x_input, channel_y_to_x)
     loss_y = data_set.params().LOSS_Y * losses.mean_squared_error(y_input, channel_x_to_y)
     loss_representation = 0.0
-    assert(representation_layer_xy is not None
-           and representation_layer_yx is not None)
     if data_set.params().L2_LOSS != 0.0:
         loss_representation = data_set.params().L2_LOSS * losses.mean_squared_error(representation_layer_xy, representation_layer_yx)
+    assert(representation_layer_xy is not None
+           and representation_layer_yx is not None)
+
+    loss_withen_x = 0.0
+    loss_withen_y = 0.0
+    if representation_layer_xy is not None:
+        # mean_squared_error takes into account the batch size.
+        # when calculating the covariance matrix - we need to do this also
+        cov_x = K.dot(tf.transpose(representation_layer_xy),
+                      representation_layer_xy) / data_set.params().BATCH_SIZE
+        loss_withen_x = data_set.params().WITHEN_REG_X * (
+                    K.sqrt(K.sum(K.sum(cov_x ** 2))) - K.sqrt(K.sum(tf.diag(cov_x) ** 2)))
+    if representation_layer_yx is not None:
+        cov_y = K.dot(tf.transpose(representation_layer_yx),
+                      representation_layer_yx) / data_set.params().BATCH_SIZE
+        loss_withen_y = data_set.params().WITHEN_REG_Y * (
+                    K.sqrt(K.sum(K.sum(cov_y ** 2))) - K.sqrt(K.sum(tf.diag(cov_y) ** 2)))
 
     def combined_loss(_y_true_unused, _y_pred_unused):
-        return loss_x + loss_y + loss_representation
+        return loss_x + loss_y + loss_representation + loss_withen_x +  loss_withen_y
 
     # add images to see what's going on:
     dummy_metic_for_images, image_variables = data_set.get_tb_image_varibles(
@@ -192,13 +219,14 @@ def run_model(data_set_config):
               batch_size=data_set.params().BATCH_SIZE,
               callbacks=[tensorboard_callback]
               )
-
+    return model
 
 def main(argv):
     if len(argv) < 2:
         print("ERROR - must give a <DATASET>.ini file name")
         return 3
-    run_model(argv[1])
+    m = run_model(argv[1])
+    m.save("model2way.h5")
 
 
 if __name__ == '__main__':
