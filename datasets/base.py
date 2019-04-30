@@ -53,12 +53,14 @@ class MNISTDataset(BaseDataset):
     def y_test(self):
         return self._y_test
     def get_tb_image_varibles(self, x_input, y_input, x_output, y_output):
-        shape1 = (14, 28)
+        shape1 = (28, 14)
+        # Create an image of 4 halves:
+        # x_input=original left half, y_output=predicted right half, x_output=predicted left-half, y_input=original left half
         img_tensors = [tf.reshape(tf.cast(t[0] * 255, tf.uint8), shape=shape1) for t in
-                       [x_input, y_input, x_output, y_output]]
-        full_img = tf.concat(img_tensors, axis=0)
+                       [x_input ,y_output, x_output, y_input]]
+        full_img = tf.concat(img_tensors, axis=1)
 
-        img_var = tf.keras.backend.variable(tf.zeros(shape=(shape1[0] * 4, shape1[1]), dtype=tf.uint8),
+        img_var = tf.keras.backend.variable(tf.zeros(shape=(shape1[0], shape1[1] * 4), dtype=tf.uint8),
                                         name="x_y_in_out", dtype=tf.uint8)
 
         def dummy_metic_for_images(_y_true_unused, _y_pred_unused):

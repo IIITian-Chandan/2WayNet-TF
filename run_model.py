@@ -12,6 +12,8 @@ import os
 import sys
 
 from tensorflow.python.keras import losses
+from tensorflow.python.keras import regularizers
+
 import layers.tied
 import tensorflow as tf
 from tensorflow.keras.layers import LeakyReLU
@@ -60,7 +62,8 @@ def build_model(data_set, tensorboard_callback):
             layer_size = y_ouput_size
             is_last_layer = True # size -1 is only for last layer
         is_tied = layer_type in [layers.tied.TiedDenseLayer, layers.tied.LocallyDenseLayer]
-        LXY = layer_type(units=layer_size)
+        LXY = layer_type(units=layer_size,
+                         kernel_regularizer=regularizers.l2(data_set.params().WEIGHT_DECAY))
         activation_xy = activation_yx = None
         if not is_last_layer:
             activation_xy = LeakyReLU(alpha=data_set.params().LEAKINESS)
