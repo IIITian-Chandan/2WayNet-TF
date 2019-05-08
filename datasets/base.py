@@ -1,4 +1,7 @@
 import tensorflow as tf
+import platform
+
+DEBUG_SMALL_DATASET = True
 
 class BaseDataset(object):
     def __init__(self, params):
@@ -30,11 +33,13 @@ class MNISTDataset(BaseDataset):
         with tf.Session() as sess:
             mnist = tf.keras.datasets.mnist
             (z_train, label_train),(z_test, label_test) = mnist.load_data()
+            if DEBUG_SMALL_DATASET and platform.system() == "Darwin":
+                z_train = z_train[:1000]
             # are the full images - out x and y are the two halves of the images
             img_sz = z_train.shape[1] * z_train.shape[2]
             half_sz = img_sz // 2
             x_train, y_train = tf.split(z_train, 2, axis=2)
-            x_test, y_test = tf.split(z_train, 2, axis=2)
+            x_test, y_test = tf.split(z_test, 2, axis=2)
             def flatten(z):
                 return tf.reshape(tf.cast(z, dtype=tf.float16) / 255.0, shape=(z.shape[0], half_sz))
             # left half of image

@@ -8,6 +8,7 @@
 # from testing import test_model
 #
 import configparser
+import math
 import os
 import sys
 
@@ -20,6 +21,7 @@ from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import BatchNormalization
 import tensorboardimage
 from tensorflow.keras import backend as K
+from tensorflow.keras.callbacks import TensorBoard
 
 def create_dataset(name, config):
     import params
@@ -42,10 +44,47 @@ def shape_i(shape, i):
         return shape[i]
     return shape.as_list()[i]
 
+
+class LearningRateControl(object):
+    def __init__(self, min_lr,max_lr, step_max_lr, step_min_lr, tensorboardimage=None):
+        self.tensorboardimage = tensorboardimage
+        self.added_scalar_to_tensorboard = False
+        assert(step_min_lr > step_max_lr)  # starting accelerate, decay towards the end
+        assert(max_lr > min_lr)
+        self.min_lr = min_lr
+        self.max_lr = max_lr
+        self.step_max_lr = step_max_lr
+        total_accelerate_log = math.log(max_lr) - math.log(min_lr)
+        # how much to accelerate from step 0 to max
+        self.step_accelerate_log = total_accelerate_log / self.step_max_lr
+        self.step_deccelerate_log = -total_accelerate_log / (step_min_lr - self.step_max_lr)
+        self.global_step = None
+
+    def __call__(self, *args, **kwargs):
+        gs = tf.train.get_global_step()
+        if gs is None:
+            # if not set - create a variable
+            self.global_step = K.variable(tf.zeros(shape=(), dtype=tf.int64), dtype=tf.int64, name="lr_global_step")
+            tf.train.global_step(K.get_session(), self.global_step)
+            gs = K.update_add(self.global_step, 1) ###tf.train.get_global_step()
+        else:
+            self.global_step = gs
+        assert(gs is not None)
+        gstep = tf.cast(gs, dtype=tf.float32)
+        lr_up = K.exp(self.step_accelerate_log * gstep) * self.min_lr
+        lr_down = K.exp(self.step_deccelerate_log * (gstep - self.step_max_lr)) * self.max_lr
+        lr = K.switch(K.less(gs, self.step_max_lr), lr_up, lr_down)
+        if self.tensorboardimage and not self.added_scalar_to_tensorboard:
+            self.tensorboardimage.add_scalar("learning_rate", lr)
+            self.added_scalar_to_tensorboard = True  # add once
+        return lr
+
+
+
 def build_model(data_set, tensorboard_callback):
     x_train = data_set.x_train()
     y_train = data_set.y_train()
-    assert(len(x_train.shape) == 2) # TODO(franji): flatten!
+    assert(len(x_train.shape) == 2)
     assert(len(y_train.shape) == 2)
     x_input_size = shape_i(x_train.shape, 1)
     y_input_size = shape_i(y_train.shape, 1)
@@ -81,9 +120,11 @@ def build_model(data_set, tensorboard_callback):
             # the orignal code uses l2(1/gamma) - but this does not make sense
             # since it causes gamma to grow. And indeed using:
             ##BatchNormalization(gamma_regularizer=inverse_l2_reg_func(data_set.params().GAMMA_COEF))
-            # causes saturation at epoc 17/60 on MNIST
-            batch_norm_xy = BatchNormalization()
-            batch_norm_yx = BatchNormalization()
+            # causes saturation at epoc 17/80 on MNIST
+            gamma_coef = data_set.params().GAMMA_COEF
+            gamma_coef = gamma_coef / 50.0 ##DEBUG DEBUG
+            batch_norm_xy = BatchNormalization(gamma_regularizer=inverse_l2_reg_func(gamma_coef))
+            batch_norm_yx = BatchNormalization(gamma_regularizer=inverse_l2_reg_func(gamma_coef))
         # We need to build LXY so we can tie internal kernel to LYX
         xy_input_shape = (None, prev_layer_size)
         print(f"Layer X->Y build {type(LXY)}(units={layer_size},input_shape={xy_input_shape})")
@@ -134,12 +175,14 @@ def build_model(data_set, tensorboard_callback):
     channel_x_to_y = x_input
     is_representation_layer = False
     representation_layer_xy = None
+    # loop layers_x_to_y to build the channel
     for lay in layers_x_to_y:
         if lay is None:
             continue
         if lay == BOOKMARK_REPRESENTATION_LAYER:
             is_representation_layer = True  # mark for next
             continue
+        # Using Keras functional API to stack the layers.
         channel_x_to_y = lay(channel_x_to_y)
         if is_representation_layer:
             # in this channel the bookmark is BEFORE the layer
@@ -149,6 +192,7 @@ def build_model(data_set, tensorboard_callback):
 
     channel_y_to_x = y_input
     representation_layer_yx = None
+    # loop reversed(layers_y_to_x) to build the other channel
     for lay in reversed(layers_y_to_x):
         if lay is None:
             continue
@@ -157,8 +201,9 @@ def build_model(data_set, tensorboard_callback):
             assert (representation_layer_yx is None)
             representation_layer_yx = channel_y_to_x
             continue
+        # Using Keras functional API to stack the layers.
         channel_y_to_x = lay(channel_y_to_x)
-
+    # Combined Loss
     loss_x = data_set.params().LOSS_X * losses.mean_squared_error(x_input, channel_y_to_x)
     loss_y = data_set.params().LOSS_Y * losses.mean_squared_error(y_input, channel_x_to_y)
     loss_representation = 0.0
@@ -190,10 +235,26 @@ def build_model(data_set, tensorboard_callback):
         x_input, y_input, channel_y_to_x, channel_x_to_y)
 
     tensorboard_callback.add_image_variables(image_variables)
+    # We have a model
     model = tf.keras.Model(inputs=[x_input, y_input],
                            outputs=[channel_x_to_y, channel_y_to_x])
-    optimizer = tf.train.MomentumOptimizer(use_nesterov=True, learning_rate=0.01, momentum=0.8)
-    model.compile(optimizer, loss=combined_loss, metrics=[dummy_metic_for_images])
+    #TODO(franji): handle learning rate decay
+    base_lr = data_set.params().BASE_LEARNING_RATE
+    batches = shape_i(x_train.shape, 0) // data_set.params().BATCH_SIZE
+    steps = data_set.params().EPOCH_NUMBER * batches
+    learning_rate_control = LearningRateControl(
+        min_lr=base_lr,
+        max_lr=base_lr * 100,
+        step_max_lr=int(steps) // 2, step_min_lr=int(steps),
+        tensorboardimage=tensorboard_callback)
+    optimizer = tf.train.MomentumOptimizer(
+        use_nesterov=True,
+        learning_rate=learning_rate_control, ###data_set.params().BASE_LEARNING_RATE,
+        momentum=data_set.params().MOMENTUM)
+    def metric_learning_rate(_y_true_unused, _y_pred_unused):
+        return learning_rate_control()
+    model.compile(optimizer, loss=combined_loss,
+                  metrics=[dummy_metic_for_images, metric_learning_rate])
     return model
 
 

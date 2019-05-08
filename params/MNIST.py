@@ -15,9 +15,9 @@ class MNIST_Params(params.DatasetConfig.DatasetConfig):
     BATCH_SIZE = 128  # number of samples in the batch for training
     VALIDATION_BATCH_SIZE = 1000  # number of samples in the batch for testing
     CROSS_VALIDATION = True  # enable the running on validation after each epoch
-    EPOCH_NUMBER = 80  # number of epochs
-    DECAY_EPOCH = [20, 40, 60, 80]  # epochs which include a learning rate decay
-    DECAY_RATE = 0.5  # The factor to multiply the learning rate in each decay
+    EPOCH_NUMBER = 20  # was 80, using accelerated/deaccelrated learning-rate - we can do with less 80  # number of epochs
+    ##DECAY_EPOCH = [20, 40, 60, 80]  # epochs which include a learning rate decay
+    ##DECAY_RATE = 0.5  # The factor to multiply the learning rate in each decay
     BASE_LEARNING_RATE = 0.0001  # starting learning rate
     MOMENTUM = 0.9  # momentum for the training
     # endregion

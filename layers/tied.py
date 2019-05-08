@@ -398,7 +398,7 @@ def _test_LocallyDenseLayer():
 
 
 def _test_all():
-    _test_LocallyDenseLayer()
+    _test_TiedDenseLayer()
     _test_TiedDropoutLayer()
     _test_LocallyDenseLayer()
 
