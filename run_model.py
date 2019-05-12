@@ -57,7 +57,7 @@ class LearningRateControl(object):
         total_accelerate_log = math.log(max_lr) - math.log(min_lr)
         # how much to accelerate from step 0 to max
         self.step_accelerate_log = total_accelerate_log / self.step_max_lr
-        self.step_deccelerate_log = -total_accelerate_log / (step_min_lr - self.step_max_lr)
+        self.step_deccelerate_log = -total_accelerate_log / (step_min_lr - self.step_max_lr - 1)
         self.global_step = None
 
     def __call__(self, *args, **kwargs):
@@ -122,7 +122,6 @@ def build_model(data_set, tensorboard_callback):
             ##BatchNormalization(gamma_regularizer=inverse_l2_reg_func(data_set.params().GAMMA_COEF))
             # causes saturation at epoc 17/80 on MNIST
             gamma_coef = data_set.params().GAMMA_COEF
-            gamma_coef = gamma_coef / 50.0 ##DEBUG DEBUG
             batch_norm_xy = BatchNormalization(gamma_regularizer=inverse_l2_reg_func(gamma_coef))
             batch_norm_yx = BatchNormalization(gamma_regularizer=inverse_l2_reg_func(gamma_coef))
         # We need to build LXY so we can tie internal kernel to LYX
@@ -251,6 +250,8 @@ def build_model(data_set, tensorboard_callback):
         use_nesterov=True,
         learning_rate=learning_rate_control, ###data_set.params().BASE_LEARNING_RATE,
         momentum=data_set.params().MOMENTUM)
+    #if tensorboard_callback:
+    #    tensorboard_callback.add_scalar("combined_loss", combined_loss(0,0))
     def metric_learning_rate(_y_true_unused, _y_pred_unused):
         return learning_rate_control()
     model.compile(optimizer, loss=combined_loss,
@@ -258,10 +259,7 @@ def build_model(data_set, tensorboard_callback):
     return model
 
 
-def run_model(data_set_config):
-    model_results = {'train': [], 'validate': []}
-    results_folder = os.path.join(os.getcwd(), 'results')
-
+def load_data_set(data_set_config):
     data_config = configparser.ConfigParser()
     data_config.read(data_set_config)
     data_parameters = data_config["dataset_parameters"]
@@ -270,8 +268,9 @@ def run_model(data_set_config):
     # construct data set
     data_set = create_dataset(data_parameters['name'], data_parameters)
     data_set.load()
+    return data_set
 
-    tensorboard_callback = tensorboardimage.create_tensorboard_callback()
+def train_model(data_set, tensorboard_callback):
     model = build_model(data_set, tensorboard_callback)
     model.fit([data_set.x_train(), data_set.y_train()],
               [data_set.y_train(), data_set.x_train()],
@@ -282,12 +281,25 @@ def run_model(data_set_config):
               )
     return model
 
+def test_model(model, data_set, tensorboard_callback):
+    x_test = data_set.x_test()
+    y_test = data_set.y_test()
+    assert(len(x_test.shape) == 2)
+    assert(len(y_test.shape) == 2)
+    res = model.evaluate([x_test, y_test], [y_test, x_test])#, callbacks=[tensorboard_callback])
+
+    print(list(zip(model.metrics_names,res)))
+
+
 def main(argv):
     if len(argv) < 2:
         print("ERROR - must give a <DATASET>.ini file name")
         return 3
-    m = run_model(argv[1])
-    m.save("model2way.h5")
+    data_set = load_data_set(argv[1])
+    tensorboard_callback = tensorboardimage.create_tensorboard_callback()
+    m = train_model(data_set, tensorboard_callback)
+    #m.save("model2way.h5")
+    test_model(m, data_set, tensorboard_callback)
 
 
 if __name__ == '__main__':
