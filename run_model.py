@@ -11,6 +11,7 @@ import configparser
 import math
 import os
 import sys
+import util
 
 from tensorflow.python.keras import losses
 from tensorflow.python.keras import regularizers
@@ -39,11 +40,6 @@ def inverse_l2_reg_func(coeff):
 
 BOOKMARK_REPRESENTATION_LAYER = "representation_layer"
 
-def shape_i(shape, i):
-    if isinstance(shape, tuple):
-        return shape[i]
-    return shape.as_list()[i]
-
 
 class LearningRateControl(object):
     def __init__(self, min_lr,max_lr, step_max_lr, step_min_lr, tensorboardimage=None):
@@ -57,7 +53,7 @@ class LearningRateControl(object):
         total_accelerate_log = math.log(max_lr) - math.log(min_lr)
         # how much to accelerate from step 0 to max
         self.step_accelerate_log = total_accelerate_log / self.step_max_lr
-        self.step_deccelerate_log = -total_accelerate_log / (step_min_lr - self.step_max_lr - 1)
+        self.step_deccelerate_log = -total_accelerate_log / (step_min_lr - self.step_max_lr + 1)
         self.global_step = None
 
     def __call__(self, *args, **kwargs):
@@ -86,13 +82,13 @@ def build_model(data_set, tensorboard_callback):
     y_train = data_set.y_train()
     assert(len(x_train.shape) == 2)
     assert(len(y_train.shape) == 2)
-    x_input_size = shape_i(x_train.shape, 1)
-    y_input_size = shape_i(y_train.shape, 1)
+    x_input_size = util.shape_i(x_train.shape, 1)
+    y_input_size = util.shape_i(y_train.shape, 1)
     x_input = tf.keras.Input(shape=(x_input_size,))
     y_input = tf.keras.Input(shape=(y_input_size,))
     prev_layer_size = x_input_size
     assert(len(y_train.shape) == 2)
-    y_ouput_size = shape_i(y_train.shape, 1)
+    y_ouput_size = util.shape_i(y_train.shape, 1)
     layers_x_to_y = []
     layers_y_to_x = []
     is_last_layer = False
@@ -239,7 +235,7 @@ def build_model(data_set, tensorboard_callback):
                            outputs=[channel_x_to_y, channel_y_to_x])
     #TODO(franji): handle learning rate decay
     base_lr = data_set.params().BASE_LEARNING_RATE
-    batches = shape_i(x_train.shape, 0) // data_set.params().BATCH_SIZE
+    batches = util.shape_i(x_train.shape, 0) // data_set.params().BATCH_SIZE
     steps = data_set.params().EPOCH_NUMBER * batches
     learning_rate_control = LearningRateControl(
         min_lr=base_lr,
@@ -254,8 +250,15 @@ def build_model(data_set, tensorboard_callback):
     #    tensorboard_callback.add_scalar("combined_loss", combined_loss(0,0))
     def metric_learning_rate(_y_true_unused, _y_pred_unused):
         return learning_rate_control()
+    def calculate_cca():
+        return util.cross_correlation_analysis(representation_layer_xy, representation_layer_yx, 50)
+
+    def metric_cca(_y_true_unused, _y_pred_unused):
+        return K.switch(K.learning_phase(), tf.constant(0.0), calculate_cca)
+
+
     model.compile(optimizer, loss=combined_loss,
-                  metrics=[dummy_metic_for_images, metric_learning_rate])
+                  metrics=[dummy_metic_for_images, metric_learning_rate, metric_cca])
     return model
 
 
@@ -291,16 +294,26 @@ def test_model(model, data_set, tensorboard_callback):
     print(list(zip(model.metrics_names,res)))
 
 
-def main(argv):
-    if len(argv) < 2:
-        print("ERROR - must give a <DATASET>.ini file name")
-        return 3
-    data_set = load_data_set(argv[1])
+def check_data(data_set, tensorboard_callback):
+    x_test = data_set.x_test()
+    y_test = data_set.y_test()
+    print(util._eval_tensor(util.cross_correlation_analysis(x_test, y_test, 50)))
+
+def train_and_test(dataset_file_ini):
+    data_set = load_data_set(dataset_file_ini)
     tensorboard_callback = tensorboardimage.create_tensorboard_callback()
     m = train_model(data_set, tensorboard_callback)
     #m.save("model2way.h5")
     test_model(m, data_set, tensorboard_callback)
+    ##check_data(data_set, tensorboard_callback)
 
+
+def main(argv):
+    if len(argv) < 2:
+        print("ERROR - must give a <DATASET>.ini file name")
+        return 3
+    train_and_test(argv[1])
+    return 0
 
 if __name__ == '__main__':
     main(sys.argv)
