@@ -82,13 +82,13 @@ def build_model(data_set, tensorboard_callback):
     y_train = data_set.y_train()
     assert(len(x_train.shape) == 2)
     assert(len(y_train.shape) == 2)
-    x_input_size = util.shape_i(x_train.shape, 1)
-    y_input_size = util.shape_i(y_train.shape, 1)
+    x_input_size = util.shape_i(x_train, 1)
+    y_input_size = util.shape_i(y_train, 1)
     x_input = tf.keras.Input(shape=(x_input_size,))
     y_input = tf.keras.Input(shape=(y_input_size,))
     prev_layer_size = x_input_size
     assert(len(y_train.shape) == 2)
-    y_ouput_size = util.shape_i(y_train.shape, 1)
+    y_ouput_size = util.shape_i(y_train, 1)
     layers_x_to_y = []
     layers_y_to_x = []
     is_last_layer = False
@@ -111,12 +111,6 @@ def build_model(data_set, tensorboard_callback):
             activation_yx = LeakyReLU(alpha=data_set.params().LEAKINESS)
         batch_norm_xy = batch_norm_yx = None
         if not is_last_layer and data_set.params().BN:
-            # TODO(franji): investigate the gamma regularization
-            # the paper says the use gamma regulazation
-            # the orignal code uses l2(1/gamma) - but this does not make sense
-            # since it causes gamma to grow. And indeed using:
-            ##BatchNormalization(gamma_regularizer=inverse_l2_reg_func(data_set.params().GAMMA_COEF))
-            # causes saturation at epoc 17/80 on MNIST
             gamma_coef = data_set.params().GAMMA_COEF
             batch_norm_xy = BatchNormalization(gamma_regularizer=inverse_l2_reg_func(gamma_coef))
             batch_norm_yx = BatchNormalization(gamma_regularizer=inverse_l2_reg_func(gamma_coef))
@@ -174,6 +168,7 @@ def build_model(data_set, tensorboard_callback):
     for lay in layers_x_to_y:
         if lay is None:
             continue
+        print(f"Build x-y: {lay}")
         if lay == BOOKMARK_REPRESENTATION_LAYER:
             is_representation_layer = True  # mark for next
             continue
@@ -188,9 +183,11 @@ def build_model(data_set, tensorboard_callback):
     channel_y_to_x = y_input
     representation_layer_yx = None
     # loop reversed(layers_y_to_x) to build the other channel
+    print("\n\n")
     for lay in reversed(layers_y_to_x):
         if lay is None:
             continue
+        print(f"Build x-y: {lay}")
         if lay == BOOKMARK_REPRESENTATION_LAYER:
             # in this channel the bookmark is AFTER the layer
             assert (representation_layer_yx is None)
@@ -233,13 +230,13 @@ def build_model(data_set, tensorboard_callback):
     # We have a model
     model = tf.keras.Model(inputs=[x_input, y_input],
                            outputs=[channel_x_to_y, channel_y_to_x])
-    #TODO(franji): handle learning rate decay
+
     base_lr = data_set.params().BASE_LEARNING_RATE
-    batches = util.shape_i(x_train.shape, 0) // data_set.params().BATCH_SIZE
+    batches = util.shape_i(x_train, 0) // data_set.params().BATCH_SIZE
     steps = data_set.params().EPOCH_NUMBER * batches
     learning_rate_control = LearningRateControl(
         min_lr=base_lr,
-        max_lr=base_lr * 100,
+        max_lr=base_lr * 50,
         step_max_lr=int(steps) // 2, step_min_lr=int(steps),
         tensorboardimage=tensorboard_callback)
     optimizer = tf.train.MomentumOptimizer(
@@ -255,6 +252,7 @@ def build_model(data_set, tensorboard_callback):
 
     def metric_cca(_y_true_unused, _y_pred_unused):
         return K.switch(K.learning_phase(), tf.constant(0.0), calculate_cca)
+        #return calculate_cca()
 
 
     model.compile(optimizer, loss=combined_loss,

@@ -36,7 +36,7 @@ class MNIST_Params(params.DatasetConfig.DatasetConfig):
     # region Architecture
     LAYERS_SPEC = [
         # format of a layer spec - (type, size)
-        # or a single layer - the representaton layer the format is (type, size, True)
+        # for (only) one of the layers - the representaton layer - the format is (type, size, True)
         # Types of layers can be TiedDenseLayer or LocallyDenseLayer
         # size==-1 is for the output layer. the size is same as output
         (TiedDenseLayer, 392),
@@ -46,9 +46,8 @@ class MNIST_Params(params.DatasetConfig.DatasetConfig):
     ]
     DROP_PROBABILITY = 0.5  # Probability for removing a neuron in the dropout/tied dropout layer
     LEAKINESS = 0.3  # Leakiness coefficient
-    LOCALLY_DENSE_M = 2  # The number of sub-dense layer in the locally dense layer
+    LOCALLY_DENSE_M = -1  # The number of sub-dense layer in the locally dense layer
     NOISE_LAYER = TiedDropoutLayer  # The type of dropout layer can be TiedDropoutLayer or Dropoutlayer
     BN = True  # If True uses batch normalization
     BN_ACTIVATION = False  # Controls the order of non-linearity, if True the non-linearity is performed after the BN
-    SIMILARITY_METRIC = 'correlation'  # controls the type of distance metric to use in calculating matching
     # endregion
