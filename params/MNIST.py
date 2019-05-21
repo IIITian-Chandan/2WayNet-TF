@@ -24,13 +24,13 @@ class MNIST_Params(params.DatasetConfig.DatasetConfig):
 
     # region Loss Weights
     # Coefficients for the loss and regularization terms
-    WEIGHT_DECAY = 0.05
-    GAMMA_COEF = 0.05
-    WITHEN_REG_X = 0.05
-    WITHEN_REG_Y = 0.05
-    L2_LOSS = 0.5
-    LOSS_X = 1
-    LOSS_Y = 1
+    WEIGHT_DECAY = 0.05 # 0.05
+    GAMMA_COEF = 0.05 # 0.05
+    WITHEN_REG_X = 0.05 #0.05
+    WITHEN_REG_Y = 0.05 #0.05
+    L2_LOSS = 0.5 #0.5
+    LOSS_X =  1.
+    LOSS_Y =  1.
     # endregion
 
     # region Architecture

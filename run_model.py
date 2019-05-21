@@ -103,8 +103,9 @@ def build_model(data_set, tensorboard_callback):
             layer_size = y_ouput_size
             is_last_layer = True # size -1 is only for last layer
         is_tied = layer_type in [layers.tied.TiedDenseLayer, layers.tied.LocallyDenseLayer]
-        LXY = layer_type(units=layer_size,
+        layer_kwargs = dict(units=layer_size,
                          kernel_regularizer=regularizers.l2(data_set.params().WEIGHT_DECAY))
+        LXY = layer_type(**layer_kwargs)
         activation_xy = activation_yx = None
         if not is_last_layer:
             activation_xy = LeakyReLU(alpha=data_set.params().LEAKINESS)
@@ -116,10 +117,11 @@ def build_model(data_set, tensorboard_callback):
             batch_norm_yx = BatchNormalization(gamma_regularizer=inverse_l2_reg_func(gamma_coef))
         # We need to build LXY so we can tie internal kernel to LYX
         xy_input_shape = (None, prev_layer_size)
-        print(f"Layer X->Y build {type(LXY)}(units={layer_size},input_shape={xy_input_shape})")
+        print(f"Layer X->Y build {type(LXY)}(kwargs={layer_kwargs})")
         LXY.build(input_shape=xy_input_shape)
         # We use prev_layer_size as number of units to the reverse layer
-        layer_kwargs = dict(units=prev_layer_size)
+        layer_kwargs = dict(units=prev_layer_size,
+                            kernel_regularizer=regularizers.l2(data_set.params().WEIGHT_DECAY))
         if is_tied:
             layer_kwargs["tied_layer"]=LXY
         LYX = layer_type(**layer_kwargs)
@@ -168,7 +170,6 @@ def build_model(data_set, tensorboard_callback):
     for lay in layers_x_to_y:
         if lay is None:
             continue
-        print(f"Build x-y: {lay}")
         if lay == BOOKMARK_REPRESENTATION_LAYER:
             is_representation_layer = True  # mark for next
             continue
@@ -183,11 +184,9 @@ def build_model(data_set, tensorboard_callback):
     channel_y_to_x = y_input
     representation_layer_yx = None
     # loop reversed(layers_y_to_x) to build the other channel
-    print("\n\n")
     for lay in reversed(layers_y_to_x):
         if lay is None:
             continue
-        print(f"Build x-y: {lay}")
         if lay == BOOKMARK_REPRESENTATION_LAYER:
             # in this channel the bookmark is AFTER the layer
             assert (representation_layer_yx is None)
@@ -251,12 +250,23 @@ def build_model(data_set, tensorboard_callback):
         return util.cross_correlation_analysis(representation_layer_xy, representation_layer_yx, 50)
 
     def metric_cca(_y_true_unused, _y_pred_unused):
-        return K.switch(K.learning_phase(), tf.constant(0.0), calculate_cca)
-        #return calculate_cca()
+        #return K.switch(K.learning_phase(), tf.constant(0.0), calculate_cca)
+        return calculate_cca()
+
+    def metric_var_x(_y_true_unused, _y_pred_unused):
+        return K.mean(K.var(representation_layer_xy))
+    def metric_var_y(_y_true_unused, _y_pred_unused):
+        return K.mean(K.var(representation_layer_yx))
 
 
     model.compile(optimizer, loss=combined_loss,
-                  metrics=[dummy_metic_for_images, metric_learning_rate, metric_cca])
+                  metrics=[
+                            #dummy_metic_for_images,
+                            #metric_learning_rate,
+                            metric_cca,
+                            metric_var_x,
+                            metric_var_y,
+                           ])
     return model
 
 
