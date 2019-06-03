@@ -7,9 +7,9 @@ class BaseDataset(object):
     def __init__(self, params):
         self._params = params
         # handle old code (2WayNet) unsuprted features
-        if self._params.pca and self._params.pca.split(" ") != ["0", "0"]:
+        if params and self._params.pca and self._params.pca.split(" ") != ["0", "0"]:
             raise NotImplementedError("PCA not supported")
-        if self._params.whiten and self._params.whiten != "0":
+        if params and self._params.whiten and self._params.whiten != "0":
             raise NotImplementedError("PCA 'withen' not supported")
 
     def params(self):
@@ -58,6 +58,7 @@ class MNISTDataset(BaseDataset):
     def y_test(self):
         return self._y_test
     def get_tb_image_varibles(self, x_input, y_input, x_output, y_output):
+        """Image for tensor board monitoring"""
         shape1 = (28, 14)
         # Create an image of 4 halves:
         # x_input=original left half, y_output=predicted right half, x_output=predicted left-half, y_input=original left half

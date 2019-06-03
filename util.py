@@ -48,15 +48,16 @@ def shape_i(x, i):
 
 def inverse_root_via_eigenvalues(m):
     ev, v = tf.linalg.eigh(m)
-    u = v
-    epsillon = 1e-8  # for numerical stability - clip
+    epsillon = 1e-5  # for numerical stability - clip
     ev = tf.where(ev > epsillon, x=ev, y=K.ones_like(ev))
+    v = tf.where(ev > epsillon, x=v, y=K.zeros_like(v))
+    u = v
     ev_inv_root = tf.math.reciprocal(tf.math.sqrt(ev))
     return tf.matmul(tf.matmul(u, tf.diag(ev_inv_root)), tf.transpose(v))
 
 
 def debug_tf(title, t):
-    #print(title, _eval_tensor(t))
+    print(title, _eval_tensor(t))
     pass
 
 
@@ -74,9 +75,8 @@ def cross_correlation_analysis(X, Y, top_k):
 
     """
     assert(shape_i(X, 0) == shape_i(Y,0))  # same number of samples
-    Nm1 = tf.cast(K.shape(X)[0] - 1, X.dtype)  # size of sample/batch
     Xm = center(X)
-    debug_tf("Xm\n", Xm)
+    Nm1 = tf.cast(K.shape(Xm)[0] - 1, Xm.dtype)  # size of sample/batch
     Ym = center(Y)
     # SigmaXY - the cross correlation
     SigmaXY = tf.divide(tf.matmul(tf.transpose(Xm), Ym), Nm1)  # X_T*Y/n
@@ -103,7 +103,19 @@ def cross_correlation_analysis(X, Y, top_k):
 def _test_concat_normals(count, stddev_list):
     columns = []
     for stddev in stddev_list:
-        columns.append(tf.random.normal(shape=[count, 1], mean=0., stddev=stddev))
+        # create 2 copies of all data - to create a linear dependeny
+        create_linear_dependency = True
+        if create_linear_dependency:
+            assert(count % 2 == 0)
+            column_parts = []
+            n = count // 2
+            r = tf.random.normal(shape=[n, 1], mean=0., stddev=stddev) # half
+            column_parts.append(r)
+            column_parts.append(r)
+            column = tf.concat(column_parts, axis=0)
+        else:
+            column = tf.random.normal(shape=[count, 1], mean=10., stddev=stddev) # half
+        columns.append(column)
     return tf.concat(columns, axis=1)
 
 
@@ -112,9 +124,31 @@ def _test_cross_correlation_analysis():
     X = _tensor2const(_test_concat_normals(M, [1., 2., 30., 7.5, 13.]))
     top_k = 5
     top = _eval_tensor(cross_correlation_analysis(X, 1.3*X, top_k=top_k))
+    print("corr=", top)
     assert(abs(top - top_k) < 1e-4)
 
 
 def _test():
     _test_center()
     _test_cross_correlation_analysis()
+
+def _debug():
+    import datasets.base
+    data = datasets.base.MNISTDataset(None)
+    data.load()
+    M = 50
+    #x = _tensor2const(_test_concat_normals(M, [1., 2., 30., 7.5, 13.]))
+    x = tf.constant(data.x_train()[:M,220:225])
+    cov = K.dot(tf.transpose(x), x)
+    cov_min = tf.reduce_min(cov)
+    cov_max = tf.reduce_max(cov)
+    cov = (cov-cov_min)/(cov_max-cov_min)
+    #top = _eval_tensor(cross_correlation_analysis(x, y, top_k=392))
+    print("XtX=", _eval_tensor(cov))
+    #print("XtX=", _eval_tensor(x))
+
+
+_test()
+#_debug()
+
+

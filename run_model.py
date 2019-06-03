@@ -28,7 +28,6 @@ def create_dataset(name, config):
     import params
     cls_params = params.get_params_class_for_dataset_name(name)
     params = cls_params(config)
-    # DEBUG
     data_loader = params.DATA_CLASS(params)
     return data_loader
 
@@ -75,6 +74,22 @@ class LearningRateControl(object):
             self.added_scalar_to_tensorboard = True  # add once
         return lr
 
+def scale1(x):
+    x_min = tf.reduce_min(x)
+    x_max = tf.reduce_max(x)
+    return (x - x_min) / (x_max - x_min)
+
+def get_cov_image_varibles(cov_x, cov_y):
+    """Image for tensor board monitoring - covariance matrices"""
+    # Create an image of 2 halves: cov_x, cov_y
+    img_tensors = [tf.cast(scale1(t) * 255.0 , tf.uint8) for t in [cov_x, cov_y]]
+    full_img = tf.concat(img_tensors, axis=1)
+
+    img_var = tf.keras.backend.variable(tf.zeros_like(full_img), name="cov_x_y", dtype=tf.uint8)
+
+    def dummy_metic_for_images(_y_true_unused, _y_pred_unused):
+        return tf.reduce_sum(tf.assign(img_var, full_img))
+    return dummy_metic_for_images, [img_var]
 
 
 def build_model(data_set, tensorboard_callback):
@@ -92,6 +107,7 @@ def build_model(data_set, tensorboard_callback):
     layers_x_to_y = []
     layers_y_to_x = []
     is_last_layer = False
+    representation_layer_size = None
     for spec in data_set.params().LAYERS_SPEC:
         assert(not is_last_layer)
         is_representation_layer = False
@@ -139,6 +155,7 @@ def build_model(data_set, tensorboard_callback):
         if is_representation_layer:
             # add a "bookmark" to the layers list
             layers_x_to_y.append(BOOKMARK_REPRESENTATION_LAYER)
+            representation_layer_size = layer_size
         layers_x_to_y.append(LXY)
         if data_set.params().BN_ACTIVATION:
             layers_x_to_y.append(batch_norm_xy)
@@ -198,18 +215,22 @@ def build_model(data_set, tensorboard_callback):
     loss_x = data_set.params().LOSS_X * losses.mean_squared_error(x_input, channel_y_to_x)
     loss_y = data_set.params().LOSS_Y * losses.mean_squared_error(y_input, channel_x_to_y)
     loss_representation = 0.0
-    if data_set.params().L2_LOSS != 0.0:
-        loss_representation = data_set.params().L2_LOSS * losses.mean_squared_error(representation_layer_xy, representation_layer_yx)
     assert(representation_layer_xy is not None
            and representation_layer_yx is not None)
+    if data_set.params().L2_LOSS != 0.0:
+        # loss_representation is named 'loss_l2' in original code.
+        loss_representation = data_set.params().L2_LOSS * losses.mean_squared_error(representation_layer_xy, representation_layer_yx)
 
     loss_withen_x = 0.0
     loss_withen_y = 0.0
+    cov_x = None
+    cov_y = None
     if representation_layer_xy is not None:
         # mean_squared_error takes into account the batch size.
         # when calculating the covariance matrix - we need to do this also
         cov_x = K.dot(tf.transpose(representation_layer_xy),
                       representation_layer_xy) / data_set.params().BATCH_SIZE
+        # TODO(Franji): using BACH_SIZE here means in test mode loss_withen_x is wrong
         loss_withen_x = data_set.params().WITHEN_REG_X * (
                     K.sqrt(K.sum(K.sum(cov_x ** 2))) - K.sqrt(K.sum(tf.diag(cov_x) ** 2)))
     if representation_layer_yx is not None:
@@ -219,13 +240,16 @@ def build_model(data_set, tensorboard_callback):
                     K.sqrt(K.sum(K.sum(cov_y ** 2))) - K.sqrt(K.sum(tf.diag(cov_y) ** 2)))
 
     def combined_loss(_y_true_unused, _y_pred_unused):
-        return loss_x + loss_y + loss_representation + loss_withen_x +  loss_withen_y
+        return loss_x + loss_y + loss_representation + loss_withen_x + loss_withen_y
 
     # add images to see what's going on:
     dummy_metic_for_images, image_variables = data_set.get_tb_image_varibles(
         x_input, y_input, channel_y_to_x, channel_x_to_y)
 
     tensorboard_callback.add_image_variables(image_variables)
+
+    dummy_metric_for_cov, cov_image_variables = get_cov_image_varibles(cov_x, cov_y)
+    tensorboard_callback.add_image_variables(cov_image_variables)
     # We have a model
     model = tf.keras.Model(inputs=[x_input, y_input],
                            outputs=[channel_x_to_y, channel_y_to_x])
@@ -247,7 +271,7 @@ def build_model(data_set, tensorboard_callback):
     def metric_learning_rate(_y_true_unused, _y_pred_unused):
         return learning_rate_control()
     def calculate_cca():
-        return util.cross_correlation_analysis(representation_layer_xy, representation_layer_yx, 50)
+        return util.cross_correlation_analysis(representation_layer_xy, representation_layer_yx, representation_layer_size)
 
     def metric_cca(_y_true_unused, _y_pred_unused):
         #return K.switch(K.learning_phase(), tf.constant(0.0), calculate_cca)
@@ -255,14 +279,16 @@ def build_model(data_set, tensorboard_callback):
 
     def metric_var_x(_y_true_unused, _y_pred_unused):
         return K.mean(K.var(representation_layer_xy))
+
     def metric_var_y(_y_true_unused, _y_pred_unused):
         return K.mean(K.var(representation_layer_yx))
 
 
     model.compile(optimizer, loss=combined_loss,
                   metrics=[
-                            #dummy_metic_for_images,
-                            #metric_learning_rate,
+                            dummy_metic_for_images,
+                            metric_learning_rate,
+                            dummy_metric_for_cov,
                             metric_cca,
                             metric_var_x,
                             metric_var_y,
@@ -288,16 +314,20 @@ def train_model(data_set, tensorboard_callback):
               epochs=data_set.params().EPOCH_NUMBER,
               #steps_per_epoch=data_set.x_train().shape.dims[0].value // data_set.params().BATCH_SIZE,
               batch_size=data_set.params().BATCH_SIZE,
-              callbacks=[tensorboard_callback]
+              callbacks=[tensorboard_callback],
+              shuffle=True,
               )
     return model
 
-def test_model(model, data_set, tensorboard_callback):
+def test_model(model, data_set, tensorboard_callback, test_batch_size):
     x_test = data_set.x_test()
     y_test = data_set.y_test()
     assert(len(x_test.shape) == 2)
     assert(len(y_test.shape) == 2)
-    res = model.evaluate([x_test, y_test], [y_test, x_test])#, callbacks=[tensorboard_callback])
+    res = model.evaluate([x_test, y_test], [y_test, x_test],
+                         batch_size=test_batch_size,
+                         #callbacks=[tensorboard_callback],
+                         )
 
     print(list(zip(model.metrics_names,res)))
 
@@ -312,7 +342,8 @@ def train_and_test(dataset_file_ini):
     tensorboard_callback = tensorboardimage.create_tensorboard_callback()
     m = train_model(data_set, tensorboard_callback)
     #m.save("model2way.h5")
-    test_model(m, data_set, tensorboard_callback)
+    test_model(m, data_set, tensorboard_callback, 200)
+    test_model(m, data_set, tensorboard_callback, 48)
     ##check_data(data_set, tensorboard_callback)
 
 
