@@ -7,6 +7,9 @@
 #
 # from testing import test_model
 #
+# to run with dirsync, ngrok on Google colab:
+#$ python ~/miscutil/dirsync.py --source  --dir . --rex_include "." --server http://9d963e8b.ngrok.io
+
 import configparser
 import math
 import os
@@ -215,9 +218,8 @@ def build_model(data_set, tensorboard_callback):
     loss_x = data_set.params().LOSS_X * losses.mean_squared_error(x_input, channel_y_to_x)
     loss_y = data_set.params().LOSS_Y * losses.mean_squared_error(y_input, channel_x_to_y)
     loss_representation = 0.0
-    assert(representation_layer_xy is not None
-           and representation_layer_yx is not None)
-    if data_set.params().L2_LOSS != 0.0:
+    #assert(representation_layer_xy is not None and representation_layer_yx is not None)
+    if data_set.params().L2_LOSS != 0.0 and representation_layer_xy is not None:
         # loss_representation is named 'loss_l2' in original code.
         loss_representation = data_set.params().L2_LOSS * losses.mean_squared_error(representation_layer_xy, representation_layer_yx)
 
@@ -248,8 +250,9 @@ def build_model(data_set, tensorboard_callback):
 
     tensorboard_callback.add_image_variables(image_variables)
 
-    dummy_metric_for_cov, cov_image_variables = get_cov_image_varibles(cov_x, cov_y)
-    tensorboard_callback.add_image_variables(cov_image_variables)
+    if representation_layer_yx is not None:
+        dummy_metric_for_cov, cov_image_variables = get_cov_image_varibles(cov_x, cov_y)
+        tensorboard_callback.add_image_variables(cov_image_variables)
     # We have a model
     model = tf.keras.Model(inputs=[x_input, y_input],
                            outputs=[channel_x_to_y, channel_y_to_x])
@@ -272,6 +275,7 @@ def build_model(data_set, tensorboard_callback):
         return learning_rate_control()
     def calculate_cca():
         return util.cross_correlation_analysis(representation_layer_xy, representation_layer_yx, representation_layer_size)
+        ###return util.cross_correlation_analysis(x_input, y_input, 392)
 
     def metric_cca(_y_true_unused, _y_pred_unused):
         #return K.switch(K.learning_phase(), tf.constant(0.0), calculate_cca)
@@ -286,9 +290,9 @@ def build_model(data_set, tensorboard_callback):
 
     model.compile(optimizer, loss=combined_loss,
                   metrics=[
-                            dummy_metic_for_images,
-                            metric_learning_rate,
-                            dummy_metric_for_cov,
+                            #dummy_metic_for_images,
+                            #metric_learning_rate,
+                            #dummy_metric_for_cov,
                             metric_cca,
                             metric_var_x,
                             metric_var_y,
@@ -342,8 +346,8 @@ def train_and_test(dataset_file_ini):
     tensorboard_callback = tensorboardimage.create_tensorboard_callback()
     m = train_model(data_set, tensorboard_callback)
     #m.save("model2way.h5")
-    test_model(m, data_set, tensorboard_callback, 200)
-    test_model(m, data_set, tensorboard_callback, 48)
+    test_model(m, data_set, tensorboard_callback, data_set.params().BATCH_SIZE)
+    test_model(m, data_set, tensorboard_callback, 6000)
     ##check_data(data_set, tensorboard_callback)
 
 

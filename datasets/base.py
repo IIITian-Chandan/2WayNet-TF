@@ -1,7 +1,8 @@
 import tensorflow as tf
 import platform
+import random
 
-DEBUG_SMALL_DATASET = True
+DEBUG_SMALL_DATASET = False
 
 class BaseDataset(object):
     def __init__(self, params):
@@ -34,6 +35,7 @@ class MNISTDataset(BaseDataset):
             mnist = tf.keras.datasets.mnist
             (z_train, label_train),(z_test, label_test) = mnist.load_data()
             if DEBUG_SMALL_DATASET and platform.system() == "Darwin":
+                random.shuffle(z_train)
                 z_train = z_train[:1000]
             # are the full images - out x and y are the two halves of the images
             img_sz = z_train.shape[1] * z_train.shape[2]
@@ -45,9 +47,11 @@ class MNISTDataset(BaseDataset):
             # left half of image
             self._x_train = sess.run(flatten(x_train))
             self._x_test = sess.run(flatten(x_test))
+            random.shuffle(self._x_test) # for some reason model.evaluate does not have suffle=True parameter
             # right half of image
             self._y_train = sess.run(flatten(y_train))
             self._y_test = sess.run(flatten(y_test))
+            random.shuffle(self._y_test)  # for some reason model.evaluate does not have suffle=True parameter
 
     def x_train(self):
         return self._x_train
