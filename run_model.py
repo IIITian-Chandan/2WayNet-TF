@@ -275,7 +275,6 @@ def build_model(data_set, tensorboard_callback):
         return learning_rate_control()
     def calculate_cca():
         return util.cross_correlation_analysis(representation_layer_xy, representation_layer_yx, representation_layer_size)
-        ###return util.cross_correlation_analysis(x_input, y_input, 392)
 
     def metric_cca(_y_true_unused, _y_pred_unused):
         #return K.switch(K.learning_phase(), tf.constant(0.0), calculate_cca)
@@ -339,7 +338,7 @@ def test_model(model, data_set, tensorboard_callback, test_batch_size):
 def check_data(data_set, tensorboard_callback):
     x_test = data_set.x_test()
     y_test = data_set.y_test()
-    print(util._eval_tensor(util.cross_correlation_analysis(x_test, y_test, 50)))
+    print(util._eval_tensor(util.cross_correlation_analysis(x_test, y_test, 50, False)))
 
 def train_and_test(dataset_file_ini):
     data_set = load_data_set(dataset_file_ini)
