@@ -147,7 +147,7 @@ def _test_TiedDenseLayer():
     assert(yx_loss > 2 * yx_loss_tied)
 
 
-class TiedDropoutLayer(tf.layers.Dropout):
+class TiedDropoutLayer(tf.python.keras.layers.Dropout):
     def __init__(self, *args, **kwargs):
         # tied_mask_variable is a "keep" mask with "1" where to keep the input.
         self.tied_mask_variable = kwargs.pop('tied_mask_variable', None)
