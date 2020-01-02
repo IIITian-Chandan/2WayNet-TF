@@ -324,6 +324,22 @@ def load_data_set(data_set_config):
 def train_model(data_set, tensorboard_callback):
     model = build_model(data_set, tensorboard_callback)
     print("=================================================")
+    tf.keras.utils.plot_model(
+        model,
+        to_file='model.png',
+        show_shapes=True,
+        show_layer_names=True,
+        expand_nested=False
+    )
+
+    tf.keras.utils.plot_model(
+        model,
+        to_file='model_nested.png',
+        show_shapes=True,
+        show_layer_names=True,
+        expand_nested=True
+    )
+
     print(model.summary())
     print("=================================================")
     model.fit([data_set.x_train(), data_set.y_train()],
