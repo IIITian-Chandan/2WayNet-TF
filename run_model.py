@@ -24,7 +24,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import BatchNormalization
 import tensorboardimage
-from tensorflow.keras import backend as K
+from tensorflow.python.keras import backend as K
 from tensorflow.keras.callbacks import TensorBoard
 
 def create_dataset(name, config):
