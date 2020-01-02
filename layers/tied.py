@@ -5,7 +5,7 @@ import datetime
 from tensorflow.python.keras.layers import InputSpec
 from tensorflow.python.framework import tensor_shape
 ##from tensorflow.python.layers import base
-from tensorflow.python.keras.layers.core import Dense
+from tensorflow.python.keras.layers import Dense
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.keras import backend as K
 from tensorflow.keras.callbacks import History
