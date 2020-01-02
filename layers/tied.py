@@ -240,7 +240,7 @@ def _test_TiedDropoutLayer():
     assert(abs(not_tied_rate/(keep_rate**2) - 1.0) < 0.15)  # 15% error
 
 
-class LocallyDenseLayer(tf.layers.Layer):
+class LocallyDenseLayer(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
         # reduction_ratio - (m in the paper) - by how much to divide the input rank
         self.units = kwargs.pop('units', None)
