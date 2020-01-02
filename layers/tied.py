@@ -2,7 +2,7 @@ import math
 import numbers
 import tensorflow as tf
 import datetime
-from tensorflow.keras.layers import InputSpec
+from tensorflow.python.keras.layers import InputSpec
 from tensorflow.python.framework import tensor_shape
 ##from tensorflow.python.layers import base
 from tensorflow.python.keras.layers.core import Dense
